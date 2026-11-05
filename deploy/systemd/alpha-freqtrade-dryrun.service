@@ -1,0 +1,19 @@
+[Unit]
+Description=Alpha Web3 Freqtrade long-only dry-run
+After=network-online.target alpha-web3-signal.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-research
+Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/home/ubuntu/.local/bin:/usr/bin
+Environment=ALPHA_FREQTRADE_LIVE_SIGNAL_PATH=/home/ubuntu/alpha-web3-research/freqtrade/user_data/signals/alpha_live_long_only_signals.parquet
+ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/freqtrade trade --userdir freqtrade/user_data -c freqtrade/config_live_long_only_dryrun.json --strategy AlphaCrossSectionalLiveLongOnlyStrategy
+Restart=always
+RestartSec=10
+TimeoutStopSec=60
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

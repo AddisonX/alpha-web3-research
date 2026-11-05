@@ -1,0 +1,23 @@
+[Unit]
+Description=Alpha Web3 isolated Binance Futures Testnet order smoke test
+After=network-online.target alpha-web3-signal.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-research
+Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/usr/bin
+Environment=ALPHA_FREQTRADE_LIVE_SIGNAL_PATH=/home/ubuntu/alpha-web3-research/freqtrade/user_data/signals/alpha_live_long_only_signals.parquet
+Environment=ALPHA_TESTNET_ARM_FILE=/home/ubuntu/alpha-testnet/ARMED
+ExecStartPre=/usr/bin/test -r /home/ubuntu/alpha-testnet/credentials.json
+ExecStartPre=/usr/bin/test -f /home/ubuntu/alpha-testnet/ARMED
+ExecStartPre=/home/ubuntu/alpha-web3-research/.venv/bin/python scripts/testnet_preflight.py --config /home/ubuntu/alpha-testnet/config.json --credentials /home/ubuntu/alpha-testnet/credentials.json
+ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/freqtrade trade --userdir /home/ubuntu/alpha-testnet/user_data --strategy-path /home/ubuntu/alpha-testnet/strategies -c /home/ubuntu/alpha-testnet/config.json -c /home/ubuntu/alpha-testnet/credentials.json --strategy AlphaTestnetLiveLongOnlyStrategy
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=60
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

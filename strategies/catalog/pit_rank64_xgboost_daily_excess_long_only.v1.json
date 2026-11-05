@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "strategy_id": "pit_rank64_xgboost_daily_excess_long_only",
+  "version": 1,
+  "name": "2025训练2026预测 XGBoost 300树 Rank64只多",
+  "description": "固定2025年训练、2026年测试，一个XGBoost模型固定300棵树不早停，64因子截面排名预测未来24h超额收益，前10%等仓只多、不设止损。",
+  "status": "research_active",
+  "direction": "long_only",
+  "decision_frequency": "24h",
+  "selection_method": "prediction_top_10pct_equal_weight",
+  "implementation_entrypoint": "alpha_web3_research.strategies.pit_rank_xgboost:PITRankXGBoostLongOnlyStrategy",
+  "model_contract": "one XGBoost squared-error regressor with exactly 300 trees; fit 2025 labels once, no validation or early stopping; predict 2026 daily excess returns from 64 factor ranks",
+  "target_contract": "nonnegative equal weights summing to one over top ceil(10% * tradable universe)",
+  "execution_adapter": "Shared daily equal-weight 4h execution simulator; no stop-loss, scheduled daily rebalancing only",
+  "created_at": "2026-10-23T00:00:00+08:00",
+  "predecessor": "pit_rank64_daily_excess_long_only@v1",
+  "tags": ["research", "xgboost", "rank64", "300_trees", "fixed_year_split", "excess_return"],
+  "source_paths": [
+    "src/alpha_web3_research/models/pit_xgboost.py",
+    "src/alpha_web3_research/strategies/pit_rank_xgboost.py",
+    "src/alpha_web3_research/models/pit_rank_dataset.py",
+    "src/alpha_web3_research/backtest/daily_equal_weight.py"
+  ],
+  "documentation_paths": ["docs/pit_xgboost_2026.md"],
+  "run_discovery": [
+    {
+      "kind": "pit_xgboost_research",
+      "pattern": "data/models/pit_rank64_xgboost_daily_excess_long_only/*/manifest.json",
+      "run_id_field": "run_id",
+      "created_at_field": "created_at",
+      "metadata_match": {"strategy_key": "pit_rank64_xgboost_daily_excess_long_only@v1"},
+      "metadata_strategy_class": null
+    }
+  ]
+}

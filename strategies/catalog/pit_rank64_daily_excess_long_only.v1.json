@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "strategy_id": "pit_rank64_daily_excess_long_only",
+  "version": 1,
+  "name": "2025起点币池 Rank64 单模型超额收益只多",
+  "description": "2025-01点时固定币池，64因子截面排名，2025-01至2026-03一次训练，2026-04固定验证early stopping，2026-05起固定测试，每日前10%等仓，单币止损10%。",
+  "status": "research_active",
+  "direction": "long_only",
+  "decision_frequency": "24h",
+  "selection_method": "prediction_top_10pct_equal_weight",
+  "implementation_entrypoint": "alpha_web3_research.strategies.pit_rank_excess:PITRankExcessLongOnlyStrategy",
+  "model_contract": "single frozen LightGBM regressor on 64 within-timestamp factor percentile ranks; target next-day excess simple return",
+  "target_contract": "nonnegative equal target weights summing to one over top ceil(10% * tradable universe)",
+  "execution_adapter": "Daily equal-weight 4h execution simulator with persistent 10% entry-price stops",
+  "created_at": "2026-10-23T00:00:00+08:00",
+  "predecessor": "cross_sectional_4h_h6_daily_long_only@v1",
+  "tags": ["research", "point_in_time", "rank64", "single_model", "excess_return"],
+  "source_paths": [
+    "src/alpha_web3_research/data/binance_archive.py",
+    "src/alpha_web3_research/universe/point_in_time.py",
+    "src/alpha_web3_research/models/pit_rank_dataset.py",
+    "src/alpha_web3_research/models/pit_rank.py",
+    "src/alpha_web3_research/strategies/pit_rank_excess.py",
+    "src/alpha_web3_research/backtest/daily_equal_weight.py"
+  ],
+  "documentation_paths": ["docs/pit_rank64_strategy.md"],
+  "run_discovery": [
+    {
+      "kind": "pit_rank_research",
+      "pattern": "data/models/pit_rank64_daily_excess_long_only/*/manifest.json",
+      "run_id_field": "run_id",
+      "created_at_field": "created_at",
+      "metadata_match": {"strategy_key": "pit_rank64_daily_excess_long_only@v1"},
+      "metadata_strategy_class": null
+    }
+  ]
+}

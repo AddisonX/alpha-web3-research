@@ -1,0 +1,1 @@
+"""Factor generation package placeholder."""

@@ -1,0 +1,21 @@
+{
+  "strategy_key": "pit_rank64_xgboost_daily_excess_long_only@v1",
+  "source_dataset_namespace": "pit_rank64_202501_202610",
+  "features_file": "strategies/features/pit_rank64.v1.json",
+  "train_start": "2025-01-01T00:00:00Z",
+  "test_start": "2026-01-01T00:00:00Z",
+  "requested_test_end": "2027-01-01T00:00:00Z",
+  "n_estimators": 300,
+  "learning_rate": 0.03,
+  "max_depth": 4,
+  "min_child_weight": 100.0,
+  "reg_alpha": 0.1,
+  "reg_lambda": 10.0,
+  "seed": 42,
+  "min_cross_section": 20,
+  "decision_hour_utc": 4,
+  "fraction": 0.10,
+  "stop_loss": null,
+  "one_way_fee_rate": 0.0005,
+  "one_way_slippage_rate": 0.0002
+}

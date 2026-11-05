@@ -1,0 +1,11 @@
+[Unit]
+Description=Capture Alpha live dashboard equity every minute
+
+[Timer]
+OnBootSec=1m
+OnUnitActiveSec=1m
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

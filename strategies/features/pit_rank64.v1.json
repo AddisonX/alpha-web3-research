@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "feature_set_id": "pit_rank64@v1",
+  "source_snapshot": "factor_correlation_4h_20260704_spearman.csv",
+  "selection": "random-order greedy absolute Spearman > 0.99 exclusion, random.Random(42)",
+  "selection_used_data_after_2025_inception": true,
+  "feature_selection_holdout_contamination": "Fixed user-requested features were chosen using the 2026-07 snapshot; the new model split does not erase that research selection history.",
+  "features": [
+    "avg_range_12", "avg_range_2", "avg_range_24", "avg_range_3", "avg_range_4", "avg_range_6", "avg_range_8",
+    "distance_to_high_12", "distance_to_high_2", "distance_to_high_24", "distance_to_high_3", "distance_to_high_4", "distance_to_high_6", "distance_to_high_8",
+    "distance_to_low_12", "distance_to_low_2", "distance_to_low_24", "distance_to_low_3", "distance_to_low_4", "distance_to_low_6", "distance_to_low_8",
+    "lower_shadow_1", "ma_gap_12", "ma_gap_24", "ma_gap_3", "ma_gap_4", "ma_gap_6", "ma_gap_8",
+    "mean_return_2", "mean_return_3", "mean_return_4",
+    "quote_volume_zscore_12", "quote_volume_zscore_2", "quote_volume_zscore_3", "quote_volume_zscore_4", "quote_volume_zscore_6", "quote_volume_zscore_8",
+    "range_1", "range_to_quote_volume_12", "range_to_quote_volume_2", "range_to_quote_volume_24", "range_to_quote_volume_6",
+    "return_1", "return_12", "return_24", "return_6", "return_8", "upper_shadow_1",
+    "volatility_12", "volatility_2", "volatility_24", "volatility_3", "volatility_4", "volatility_6", "volatility_8",
+    "volume_change_12", "volume_change_2", "volume_change_24", "volume_change_3", "volume_change_4", "volume_change_6", "volume_change_8",
+    "volume_zscore_2", "volume_zscore_24"
+  ]
+}

@@ -1,0 +1,9 @@
+[Unit]
+Description=Capture one Alpha live dashboard equity snapshot
+After=alpha-dashboard-api.service
+Requires=alpha-dashboard-api.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl --fail --silent --show-error http://127.0.0.1:8080/api/live
+StandardOutput=null

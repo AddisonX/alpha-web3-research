@@ -1,0 +1,12 @@
+[Unit]
+Description=Alpha Web3 production signal generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-research
+Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/home/ubuntu/.local/bin:/usr/bin
+Environment=OMP_NUM_THREADS=1
+ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/alpha-web3-research live generate-signals --mainnet --pairs-path freqtrade/user_data/pairs_live.json

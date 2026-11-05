@@ -1,0 +1,12 @@
+[Unit]
+Description=Alpha Web3 read-only dry-run safety audit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-research
+Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/usr/bin
+EnvironmentFile=-/home/ubuntu/alpha-web3-research/freqtrade/user_data/safety-webhook.env
+ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/alpha-web3-research live audit-dry-run

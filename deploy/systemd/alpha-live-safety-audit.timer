@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Alpha Web3 dry-run safety audit every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=true
+Unit=alpha-live-safety-audit.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew Alpha dashboard TLS certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/ubuntu/.local/bin/certbot renew --quiet --deploy-hook "/bin/systemctl reload nginx"

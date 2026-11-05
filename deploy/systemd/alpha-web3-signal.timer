@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Alpha Web3 production signals every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=20
+Unit=alpha-web3-signal.service
+
+[Install]
+WantedBy=timers.target

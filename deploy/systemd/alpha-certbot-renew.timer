@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Alpha dashboard TLS certificate twice daily
+
+[Timer]
+OnCalendar=*-*-* 03,15:17:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
