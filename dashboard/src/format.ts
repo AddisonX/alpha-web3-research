@@ -1,4 +1,4 @@
-import type { NullableNumber, StrategyRun } from "./types";
+import type { NullableNumber } from "./types";
 
 const numberFormatter = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2,
@@ -72,18 +72,3 @@ export function formatDuration(minutes: number): string {
   return `${mins}分钟`;
 }
 
-export function formatBacktestDuration(value: string): string {
-  if (!value) return "—";
-  return value
-    .replace(/(\d+)\s+days?/g, "$1天")
-    .replace(/,\s*/g, " ")
-    .replace(/^0天\s*/, "");
-}
-
-export function shortRunId(run: StrategyRun): string {
-  return `${run.archive.replace("backtest-result-", "").replace(".zip", "")}`;
-}
-
-export function runLabel(run: StrategyRun): string {
-  return `${run.strategy} · ${shortRunId(run)}`;
-}

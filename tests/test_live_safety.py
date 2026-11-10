@@ -12,10 +12,11 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from alpha_web3_research.live.safety import check_live_signal_status
-from alpha_web3_research.live.signals import HOUR_MS, build_signal_timeline, rank_long_only_scores
+from src.live.safety import check_live_signal_status
+from src.live.signals import HOUR_MS, build_signal_timeline
+from src.strategies.lightgbm import rank_long_only_scores
 
-STRATEGIES = Path(__file__).resolve().parents[1] / "freqtrade" / "user_data" / "strategies"
+STRATEGIES = Path(__file__).resolve().parents[1] / "freqtrade" / "strategies"
 sys.path.insert(0, str(STRATEGIES))
 live_module = importlib.import_module("AlphaCrossSectionalLiveLongOnlyStrategy")
 LiveStrategy = live_module.AlphaCrossSectionalLiveLongOnlyStrategy

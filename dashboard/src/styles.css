@@ -175,6 +175,37 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(209, 106, 95, 0.12);
 }
 
+.instance-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 13px;
+}
+
+.instance-control > span {
+  white-space: nowrap;
+}
+
+.instance-control select {
+  min-width: 0;
+  width: 280px;
+  max-width: 100%;
+  height: 36px;
+  border: 1px solid #dce3df;
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 8px;
+  color: #23342d;
+  font: inherit;
+}
+
+@media (max-width: 760px) {
+  .instance-control { width: 100%; }
+  .instance-control select { flex: 1; width: 0; }
+}
+
 .live-topbar-title {
   min-width: 0;
   display: flex;
@@ -1457,14 +1488,7 @@ button:disabled {
   }
 
   .sidebar {
-    position: fixed;
-    inset: auto 0 0 0;
-    width: auto;
-    height: 58px;
-    padding: 6px 10px;
-    border-top: 1px solid #2e3935;
-    flex-direction: row;
-    z-index: 30;
+    display: none;
   }
 
   .brand-mark,
@@ -1494,7 +1518,7 @@ button:disabled {
   }
 
   .main-area {
-    padding-bottom: 58px;
+    padding-bottom: 0;
   }
 
   .topbar {

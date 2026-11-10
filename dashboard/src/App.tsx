@@ -1,83 +1,21 @@
-import {
-  Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart3,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  Clock3,
-  Download,
-  Gauge,
-  LayoutDashboard,
-  ListFilter,
-  RadioTower,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  Server,
-  SlidersHorizontal,
-  TableProperties,
-  TrendingDown,
-  TrendingUp,
-  WalletCards,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  Brush,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-  ZAxis,
-} from "recharts";
+import {Activity, BarChart3, CircleDollarSign, Gauge, RadioTower, RefreshCw, RotateCcw, Server, TrendingDown, TrendingUp, WalletCards, ZoomIn, ZoomOut} from "lucide-react";
 
-import {
-  formatCompact,
-  formatBacktestDuration,
-  formatDate,
-  formatDateTime,
-  formatDuration,
-  formatMoney,
-  formatNumber,
-  formatPct,
-  runLabel,
-  shortRunId,
-} from "./format";
-import type {
-  DashboardData,
-  EquityPoint,
-  LiveDashboardData,
-  LiveEquityHistoryResponse,
-  LiveEquityPoint,
-  StrategyRun,
-  SummaryRow,
-  Trade,
-} from "./types";
+import {memo, useEffect, useState} from "react";
 
-type View = "live" | "overview" | "strategies" | "trades";
-type EquityMode = "balance" | "returnPct";
+import {Brush, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis} from "recharts";
+
+import {formatDateTime, formatDuration, formatMoney, formatNumber, formatPct} from "./format";
+
+import type {InstanceCatalog, LiveDashboardData, LiveEquityHistoryResponse, LiveEquityPoint} from "./types";
+
 type LiveHistoryRange = "24h" | "7d" | "30d" | "all";
+
 type LiveHistoryInterval = "auto" | "raw" | "15m" | "1h" | "4h" | "1d";
 
-const RUN_COLORS = ["#126b55", "#2d5f9a", "#c47b22", "#99505e", "#6c5d97"];
 const POSITIVE = "#126b55";
+
 const NEGATIVE = "#c4473a";
+
 const NEUTRAL = "#77817d";
 
 function valueColor(value: number | null): string {
@@ -85,15 +23,15 @@ function valueColor(value: number | null): string {
   return value > 0 ? POSITIVE : NEGATIVE;
 }
 
-async function requestLiveSnapshot(): Promise<LiveDashboardData> {
+async function requestLiveSnapshot(instanceId: string, signal: AbortSignal): Promise<LiveDashboardData> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   try {
-    const response = await fetch(`/api/live?t=${Date.now()}`, {
+    const response = await fetch(`/api/instances/${encodeURIComponent(instanceId)}/live?t=${Date.now()}`, {
       cache: "no-store",
-      signal: controller.signal,
+      signal: AbortSignal.any([signal, controller.signal]),
     });
-    if (!response.ok) throw new Error(`实时 API 返回 HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`实时 API 返回 HTTP ${response.status}${response.status === 409 ? "：实例数据库尚未就绪" : ""}`);
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new Error("实时 API 返回了非 JSON 内容");
     }
@@ -111,244 +49,6 @@ async function requestLiveSnapshot(): Promise<LiveDashboardData> {
   }
 }
 
-function App() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [liveData, setLiveData] = useState<LiveDashboardData | null>(null);
-  const [liveError, setLiveError] = useState<string | null>(null);
-  const [liveLoading, setLiveLoading] = useState(true);
-  const [activeView, setActiveView] = useState<View>("live");
-  const [selectedRunId, setSelectedRunId] = useState("");
-  const [compareIds, setCompareIds] = useState<string[]>([]);
-  const liveRequestActive = useRef(false);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/data/backtests.json?t=${Date.now()}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const nextData = (await response.json()) as DashboardData;
-      if (!nextData.runs.length) throw new Error("结果中没有策略运行");
-      setData(nextData);
-      setSelectedRunId((current) => {
-        if (current && nextData.runs.some((run) => run.id === current)) return current;
-        return nextData.runs.find((run) => run.isLatest)?.id ?? nextData.runs[0].id;
-      });
-      setCompareIds((current) => {
-        const valid = current.filter((id) => nextData.runs.some((run) => run.id === id));
-        return valid.length ? valid : nextData.runs.slice(0, 3).map((run) => run.id);
-      });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "无法读取回测数据");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadLive = useCallback(async () => {
-    if (liveRequestActive.current) return;
-    liveRequestActive.current = true;
-    setLiveLoading(true);
-    try {
-      let nextData: LiveDashboardData | null = null;
-      let lastError: unknown = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          nextData = await requestLiveSnapshot();
-          break;
-        } catch (caught) {
-          lastError = caught;
-        }
-      }
-      if (!nextData) throw lastError;
-      setLiveData(nextData);
-      setLiveError(null);
-    } catch (caught) {
-      setLiveError(caught instanceof Error ? caught.message : "无法读取实时模拟盘");
-    } finally {
-      liveRequestActive.current = false;
-      setLiveLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    void loadLive();
-    const timer = window.setInterval(() => void loadLive(), 10_000);
-    return () => window.clearInterval(timer);
-  }, [loadLive]);
-
-  const selectedRun = data?.runs.find((run) => run.id === selectedRunId) ?? null;
-
-  if (loading && !data) return <LoadingState />;
-  if (error && !data) return <ErrorState message={error} retry={loadData} />;
-  if (!data || !selectedRun) return null;
-
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-mark" aria-label="Alpha Strategy Monitor">
-          <span className="brand-symbol">A</span>
-          <div>
-            <strong>Alpha</strong>
-            <span>Strategy Monitor</span>
-          </div>
-        </div>
-
-        <nav className="primary-nav" aria-label="主导航">
-          <NavButton
-            active={activeView === "live"}
-            icon={<RadioTower size={18} />}
-            label="实时模拟盘"
-            onClick={() => setActiveView("live")}
-          />
-          <NavButton
-            active={activeView === "overview"}
-            icon={<LayoutDashboard size={18} />}
-            label="策略总览"
-            onClick={() => setActiveView("overview")}
-          />
-          <NavButton
-            active={activeView === "strategies"}
-            icon={<BarChart3 size={18} />}
-            label="策略对比"
-            onClick={() => setActiveView("strategies")}
-          />
-          <NavButton
-            active={activeView === "trades"}
-            icon={<TableProperties size={18} />}
-            label="交易明细"
-            onClick={() => setActiveView("trades")}
-          />
-        </nav>
-
-        <div className="sidebar-status">
-          <div className="status-line">
-            <span className={liveError ? "status-dot error" : "status-dot"} />
-            {liveError ? "实时接口异常" : "Dry-run 运行中"}
-          </div>
-          <span>{liveData?.summary.open_positions ?? 0} 个当前持仓</span>
-          <span>{data.archiveCount} 个回测归档</span>
-        </div>
-      </aside>
-
-      <main className="main-area">
-        <header className="topbar">
-          <div className="mobile-brand">
-            <span className="brand-symbol">A</span>
-            <strong>Alpha Monitor</strong>
-          </div>
-          {activeView === "live" ? (
-            <div className="live-topbar-title">
-              <span className="live-pulse" />
-              <strong>
-                {liveData
-                  ? marketDataSourceLabel(liveData.market_data_source)
-                  : "Binance Futures"}
-              </strong>
-              <span>Long only · Dry-run</span>
-            </div>
-          ) : (
-            <div className="run-control">
-              <label htmlFor="run-select">当前运行</label>
-              <select
-                id="run-select"
-                value={selectedRun.id}
-                onChange={(event) => setSelectedRunId(event.target.value)}
-              >
-                {data.runs.map((run) => (
-                  <option key={run.id} value={run.id}>
-                    {runLabel(run)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="topbar-meta">
-            <span>
-              更新于{" "}
-              {formatDateTime(
-                activeView === "live" && liveData ? liveData.generated_at : data.generatedAt,
-              )}
-            </span>
-            <button
-              className={liveLoading ? "icon-button refreshing" : "icon-button"}
-              type="button"
-              title="刷新数据"
-              aria-label="刷新数据"
-              onClick={() => void (activeView === "live" ? loadLive() : loadData())}
-            >
-              <RefreshCw size={17} />
-            </button>
-          </div>
-        </header>
-
-        {error ? (
-          <div className="inline-alert">
-            数据刷新失败：{error}
-            <button type="button" onClick={() => setError(null)} aria-label="关闭">
-              <X size={16} />
-            </button>
-          </div>
-        ) : null}
-
-        {liveError && activeView === "live" ? (
-          <div className="inline-alert">
-            实时数据刷新失败：{liveError}。界面保留最后一次成功快照。
-            <button type="button" onClick={() => setLiveError(null)} aria-label="关闭">
-              <X size={16} />
-            </button>
-          </div>
-        ) : null}
-
-        {activeView === "live" ? (
-          liveData ? <LiveView data={liveData} /> : <LiveLoadingState />
-        ) : null}
-        {activeView === "overview" ? <Overview run={selectedRun} /> : null}
-        {activeView === "strategies" ? (
-          <StrategiesView
-            data={data}
-            selectedRunId={selectedRun.id}
-            compareIds={compareIds}
-            onCompareChange={setCompareIds}
-            onSelectRun={(id) => {
-              setSelectedRunId(id);
-              setActiveView("overview");
-            }}
-          />
-        ) : null}
-        {activeView === "trades" ? <TradesView run={selectedRun} /> : null}
-      </main>
-    </div>
-  );
-}
-
-function NavButton({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button className={active ? "nav-button active" : "nav-button"} type="button" onClick={onClick}>
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
 function LiveView({ data }: { data: LiveDashboardData }) {
   const signalHealthy = data.signal.state === "healthy";
   const priceHealthy = data.price_state === "healthy";
@@ -359,7 +59,7 @@ function LiveView({ data }: { data: LiveDashboardData }) {
       <div className="page-heading live-heading">
         <div>
           <span className="eyebrow">实时模拟盘</span>
-          <h1>{breakStrategyName(data.strategy)}</h1>
+          <h1>{data.instance.display_name}</h1>
           <p>
             10 秒自动刷新
             <span>·</span>
@@ -369,6 +69,9 @@ function LiveView({ data }: { data: LiveDashboardData }) {
           </p>
         </div>
         <div className="tag-list" aria-label="运行状态">
+          <span className={data.instance.runtime_state === "running" ? "tag live-ok" : "tag live-warn"}>
+            {data.instance.runtime_state === "running" ? "运行中" : `运行状态 ${data.instance.runtime_state}`}
+          </span>
           <span className={signalHealthy ? "tag live-ok" : "tag live-warn"}>
             <span className="mini-status-dot" />
             信号 {signalHealthy ? "正常" : data.signal.state}
@@ -430,7 +133,7 @@ function LiveView({ data }: { data: LiveDashboardData }) {
         <LiveEquityPanel data={data} />
 
         <section className="panel signal-panel">
-          <PanelHeader title="信号生产状态" subtitle="LightGBM 横截面模型" />
+          <PanelHeader title="信号生产状态" subtitle={data.instance.strategy_id} />
           <div className="signal-health">
             <span className={signalHealthy ? "health-icon healthy" : "health-icon warning"}>
               <Server size={19} />
@@ -454,8 +157,8 @@ function LiveView({ data }: { data: LiveDashboardData }) {
               }
             />
             <DiagnosticRow
-              label="模型组合"
-              value={`${data.signal.model_count ?? "—"} 个模型`}
+              label="信号引擎"
+              value={data.signal.model_count === 0 ? "规则策略" : `${data.signal.model_count ?? "—"} 个模型`}
             />
             <DiagnosticRow
               label="截面覆盖"
@@ -492,7 +195,7 @@ function LiveView({ data }: { data: LiveDashboardData }) {
             <thead>
               <tr>
                 <th>交易对</th>
-                <th>模型排名</th>
+                <th>信号排序</th>
                 <th>开仓价</th>
                 <th>最新价</th>
                 <th>投入</th>
@@ -597,33 +300,35 @@ const LIVE_HISTORY_RANGES: Array<{ value: LiveHistoryRange; label: string }> = [
 ];
 
 const LIVE_HISTORY_CACHE_TTL_MS = 30_000;
+
 const liveHistoryCache = new Map<
   string,
   { data: LiveEquityHistoryResponse; cachedAt: number }
 >();
 
-function liveHistoryCacheKey(range: LiveHistoryRange, interval: LiveHistoryInterval): string {
-  return `${range}:${interval}`;
+function liveHistoryCacheKey(instanceId: string, range: LiveHistoryRange, interval: LiveHistoryInterval): string {
+  return `${instanceId}:${range}:${interval}`;
 }
 
 async function requestLiveEquityHistory(
+  instanceId: string,
   range: LiveHistoryRange,
   interval: LiveHistoryInterval,
   signal?: AbortSignal,
 ): Promise<LiveEquityHistoryResponse> {
   const params = new URLSearchParams({ range, interval });
-  const response = await fetch(`/api/live/equity?${params}`, {
+  const response = await fetch(`/api/instances/${encodeURIComponent(instanceId)}/equity?${params}`, {
     cache: "default",
     signal,
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = (await response.json()) as LiveEquityHistoryResponse;
-  liveHistoryCache.set(liveHistoryCacheKey(range, interval), {
+  liveHistoryCache.set(liveHistoryCacheKey(instanceId, range, interval), {
     data,
     cachedAt: Date.now(),
   });
   if (interval === "auto") {
-    liveHistoryCache.set(liveHistoryCacheKey(range, data.interval), {
+    liveHistoryCache.set(liveHistoryCacheKey(instanceId, range, data.interval), {
       data,
       cachedAt: Date.now(),
     });
@@ -632,6 +337,7 @@ async function requestLiveEquityHistory(
 }
 
 function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
+  const instanceId = data.instance.id;
   const [range, setRange] = useState<LiveHistoryRange>("all");
   const [interval, setInterval] = useState<LiveHistoryInterval>("auto");
   const [history, setHistory] = useState<LiveEquityHistoryResponse | null>(null);
@@ -641,7 +347,7 @@ function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const key = liveHistoryCacheKey(range, interval);
+    const key = liveHistoryCacheKey(instanceId, range, interval);
     const cached = liveHistoryCache.get(key);
     if (cached) {
       setHistory(cached.data);
@@ -659,7 +365,7 @@ function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
       }
       if (!current) setHistoryLoading(true);
       try {
-        const nextHistory = await requestLiveEquityHistory(range, interval, controller.signal);
+        const nextHistory = await requestLiveEquityHistory(instanceId, range, interval, controller.signal);
         setHistory(nextHistory);
         setHistoryError(null);
       } catch (caught) {
@@ -684,10 +390,10 @@ function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
         [range, "1d"],
       ];
       for (const [targetRange, targetInterval] of prefetchTargets) {
-        const prefetchKey = liveHistoryCacheKey(targetRange, targetInterval);
+        const prefetchKey = liveHistoryCacheKey(instanceId, targetRange, targetInterval);
         const prefetched = liveHistoryCache.get(prefetchKey);
         if (prefetched && Date.now() - prefetched.cachedAt < LIVE_HISTORY_CACHE_TTL_MS) continue;
-        void requestLiveEquityHistory(targetRange, targetInterval).catch(() => undefined);
+        void requestLiveEquityHistory(instanceId, targetRange, targetInterval, controller.signal).catch(() => undefined);
       }
     }, 400);
     return () => {
@@ -695,7 +401,7 @@ function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
       window.clearInterval(timer);
       window.clearTimeout(prefetchTimer);
     };
-  }, [range, interval]);
+  }, [instanceId, range, interval]);
 
   const points = history?.points ?? data.equity_history;
   const lastIndex = Math.max(0, points.length - 1);
@@ -878,7 +584,8 @@ function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
 const LiveEquityPanel = memo(
   LiveEquityPanelComponent,
   (previous, next) =>
-    previous.data.summary.starting_balance === next.data.summary.starting_balance
+    previous.data.instance.id === next.data.instance.id
+    && previous.data.summary.starting_balance === next.data.summary.starting_balance
     && previous.data.summary.fees === next.data.summary.fees,
 );
 
@@ -950,15 +657,6 @@ function shortPair(pair: string): string {
   return pair.replace("/USDT:USDT", "");
 }
 
-function breakStrategyName(name: string) {
-  return name.split(/(?=[A-Z])/).map((part, index) => (
-    <span className="strategy-word" key={`${part}-${index}`}>
-      {part}
-      <wbr />
-    </span>
-  ));
-}
-
 function formatPrice(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
   const digits = value >= 1000 ? 2 : value >= 1 ? 4 : 6;
@@ -966,248 +664,6 @@ function formatPrice(value: number | null): string {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-}
-
-function Overview({ run }: { run: StrategyRun }) {
-  const [equityMode, setEquityMode] = useState<EquityMode>("balance");
-  const sortedPairs = useMemo(
-    () => [...run.pairPerformance].sort((a, b) => (b.profitAbs ?? 0) - (a.profitAbs ?? 0)),
-    [run],
-  );
-  const pairExtremes = useMemo(() => {
-    const winners = sortedPairs.slice(0, 6);
-    const losers = sortedPairs.slice(Math.max(6, sortedPairs.length - 6));
-    return [...winners, ...losers].sort((a, b) => (a.profitAbs ?? 0) - (b.profitAbs ?? 0));
-  }, [sortedPairs]);
-
-  return (
-    <div className="page">
-      <PageHeading run={run} eyebrow="策略总览" />
-
-      <section className="metric-strip" aria-label="核心指标">
-        <Metric
-          label="总收益"
-          value={formatPct(run.summary.returnPct, true)}
-          tone={valueColor(run.summary.returnPct)}
-          icon={<TrendingUp size={18} />}
-          note={formatMoney(run.summary.profitAbs, run.execution.stakeCurrency, true)}
-        />
-        <Metric
-          label="最大回撤"
-          value={formatPct(run.summary.maxDrawdownPct)}
-          tone={NEGATIVE}
-          icon={<TrendingDown size={18} />}
-          note={formatMoney(run.summary.maxDrawdownAbs, run.execution.stakeCurrency)}
-        />
-        <Metric
-          label="Profit factor"
-          value={formatNumber(run.summary.profitFactor)}
-          tone={(run.summary.profitFactor ?? 0) >= 1 ? POSITIVE : NEGATIVE}
-          icon={<Gauge size={18} />}
-          note={`期望 ${formatMoney(run.summary.expectancy, run.execution.stakeCurrency)}`}
-        />
-        <Metric
-          label="胜率"
-          value={formatPct(run.summary.winRatePct)}
-          tone="#2d5f9a"
-          icon={<Activity size={18} />}
-          note={`${run.summary.wins} 胜 / ${run.summary.losses} 负`}
-        />
-        <Metric
-          label="交易数"
-          value={run.summary.trades.toLocaleString("zh-CN")}
-          tone="#2f3835"
-          icon={<ListFilter size={18} />}
-          note={`${formatNumber(run.summary.tradesPerDay)} 笔/日`}
-        />
-        <Metric
-          label="最终资金"
-          value={formatMoney(run.summary.finalBalance, run.execution.stakeCurrency)}
-          tone="#2f3835"
-          icon={<WalletCards size={18} />}
-          note={`起始 ${formatMoney(run.summary.startingBalance, run.execution.stakeCurrency)}`}
-        />
-      </section>
-
-      <section className="panel chart-panel">
-        <PanelHeader
-          title="资金曲线与回撤"
-          subtitle={`${run.period.days} 天 · 日频钱包余额`}
-          action={
-            <div className="segmented" aria-label="资金曲线指标">
-              <button
-                className={equityMode === "balance" ? "active" : ""}
-                type="button"
-                onClick={() => setEquityMode("balance")}
-              >
-                余额
-              </button>
-              <button
-                className={equityMode === "returnPct" ? "active" : ""}
-                type="button"
-                onClick={() => setEquityMode("returnPct")}
-              >
-                累计收益
-              </button>
-            </div>
-          }
-        />
-        <div className="equity-chart">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={run.equity} margin={{ top: 12, right: 10, bottom: 0, left: 4 }}>
-              <CartesianGrid stroke="#e4e8e6" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(value: string) => value.slice(5)}
-                tick={{ fontSize: 11, fill: "#77817d" }}
-                axisLine={false}
-                tickLine={false}
-                minTickGap={28}
-              />
-              <YAxis
-                yAxisId="primary"
-                tickFormatter={(value: number) =>
-                  equityMode === "balance" ? `${Math.round(value / 1000)}k` : `${value}%`
-                }
-                tick={{ fontSize: 11, fill: "#77817d" }}
-                axisLine={false}
-                tickLine={false}
-                width={44}
-                domain={["auto", "auto"]}
-              />
-              <YAxis
-                yAxisId="drawdown"
-                orientation="right"
-                domain={["dataMin", 0]}
-                hide
-              />
-              <Tooltip content={<EquityTooltip mode={equityMode} currency={run.execution.stakeCurrency} />} />
-              <ReferenceLine
-                yAxisId="primary"
-                y={equityMode === "balance" ? run.summary.startingBalance : 0}
-                stroke="#aeb6b2"
-                strokeDasharray="4 4"
-              />
-              <Bar
-                yAxisId="drawdown"
-                dataKey="drawdownPct"
-                fill="#d8a29b"
-                opacity={0.35}
-                isAnimationActive={false}
-              />
-              <Line
-                yAxisId="primary"
-                type="monotone"
-                dataKey={equityMode}
-                stroke={POSITIVE}
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 4, fill: POSITIVE, stroke: "#fff", strokeWidth: 2 }}
-                isAnimationActive={false}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="chart-legend-row">
-          <span><i className="legend-line" />{equityMode === "balance" ? "钱包余额" : "累计收益"}</span>
-          <span><i className="legend-block" />回撤区间</span>
-          <strong>钱包 Sharpe {formatNumber(run.summary.sharpe)}</strong>
-        </div>
-      </section>
-
-      <div className="analysis-grid">
-        <section className="panel">
-          <PanelHeader title="多空贡献" subtitle="按初始资金计算的收益贡献" />
-          <DirectionComparison run={run} />
-        </section>
-
-        <section className="panel">
-          <PanelHeader title="退出结构" subtitle="收益与风险从哪里产生" />
-          <ExitReasonChart rows={run.exitReasons} />
-        </section>
-
-        <section className="panel diagnostics">
-          <PanelHeader title="运行诊断" subtitle="执行假设与统计可靠性" />
-          <DiagnosticRow label="市场同期涨幅" value={formatPct(run.summary.marketChangePct, true)} />
-          <DiagnosticRow label="平均单笔收益" value={formatPct(run.summary.avgProfitPct, true)} />
-          <DiagnosticRow label="单笔均值 p-value" value={formatNumber(run.summary.pValue, 4)} warning />
-          <DiagnosticRow label="止损 / 手续费" value={`${formatPct(run.execution.stoplossPct)} / ${formatPct(run.execution.feePct)}`} />
-          <DiagnosticRow label="杠杆 / 最大持仓" value={`${formatNumber(run.execution.leverage)}x / ${run.execution.maxOpenTrades}`} />
-        </section>
-      </div>
-
-      <section className="panel">
-        <PanelHeader title="币种收益贡献" subtitle={`覆盖 ${run.pairPerformance.length} 个交易对`} />
-        <div className="pair-layout">
-          <div className="pair-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={pairExtremes}
-                layout="vertical"
-                margin={{ top: 4, right: 18, bottom: 4, left: 8 }}
-              >
-                <CartesianGrid stroke="#e4e8e6" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 10, fill: "#77817d" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value: number) => `${Math.round(value)}`}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="pair"
-                  tick={{ fontSize: 10, fill: "#4e5955" }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={116}
-                  tickFormatter={(value: string) => value.replace("/USDT:USDT", "")}
-                />
-                <Tooltip content={<ProfitTooltip currency={run.execution.stakeCurrency} labelKey="pair" />} />
-                <ReferenceLine x={0} stroke="#aeb6b2" />
-                <Bar dataKey="profitAbs" radius={[0, 2, 2, 0]} isAnimationActive={false}>
-                  {pairExtremes.map((row) => (
-                    <Cell key={row.pair} fill={(row.profitAbs ?? 0) >= 0 ? POSITIVE : NEGATIVE} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <PairTable rows={sortedPairs.slice(0, 8)} currency={run.execution.stakeCurrency} />
-        </div>
-      </section>
-
-      <section className="panel">
-        <PanelHeader title="周期表现" subtitle="月度与星期分布" />
-        <div className="period-grid">
-          <PeriodTable title="月度" rows={run.monthly} currency={run.execution.stakeCurrency} />
-          <PeriodTable title="星期" rows={run.weekdays} currency={run.execution.stakeCurrency} />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function PageHeading({ run, eyebrow }: { run: StrategyRun; eyebrow: string }) {
-  return (
-    <div className="page-heading">
-      <div>
-        <span className="eyebrow">{eyebrow}</span>
-        <h1>{run.strategy}</h1>
-        <p>
-          {formatDate(run.period.start)} 至 {formatDate(run.period.end)}
-          <span>·</span>
-          {run.archive}
-        </p>
-      </div>
-      <div className="tag-list" aria-label="运行属性">
-        {run.isLatest ? <span className="tag latest"><Check size={13} />最新</span> : null}
-        <span className="tag">{run.period.timeframe}</span>
-        <span className="tag">{run.execution.tradingMode}</span>
-        <span className="tag">{run.execution.marginMode}</span>
-      </div>
-    </div>
-  );
 }
 
 function Metric({
@@ -1255,126 +711,6 @@ function PanelHeader({
   );
 }
 
-function EquityTooltip({
-  active,
-  payload,
-  label,
-  mode,
-  currency,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: EquityPoint }>;
-  label?: string;
-  mode: EquityMode;
-  currency: string;
-}) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
-  return (
-    <div className="chart-tooltip">
-      <strong>{label}</strong>
-      <span>{mode === "balance" ? formatMoney(point.balance, currency) : formatPct(point.returnPct, true)}</span>
-      <small>当日 {formatMoney(point.profitAbs, currency, true)}</small>
-      <small>回撤 {formatPct(Math.abs(point.drawdownPct))}</small>
-    </div>
-  );
-}
-
-function ProfitTooltip({
-  active,
-  payload,
-  currency,
-  labelKey,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: SummaryRow }>;
-  currency: string;
-  labelKey: "pair" | "reason";
-}) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
-  return (
-    <div className="chart-tooltip">
-      <strong>{row[labelKey]}</strong>
-      <span>{formatMoney(row.profitAbs, currency, true)}</span>
-      <small>{row.trades} 笔 · 胜率 {formatPct(row.winRatePct)}</small>
-    </div>
-  );
-}
-
-function DirectionComparison({ run }: { run: StrategyRun }) {
-  const rows = [
-    { side: "Long", ...run.directions.long, color: POSITIVE, icon: <ArrowUpRight size={17} /> },
-    { side: "Short", ...run.directions.short, color: "#2d5f9a", icon: <ArrowDownRight size={17} /> },
-  ];
-  const maxValue = Math.max(...rows.map((row) => Math.abs(row.profitAbs ?? 0)), 1);
-  return (
-    <div className="direction-list">
-      {rows.map((row) => (
-        <div className="direction-row" key={row.side}>
-          <div className="direction-title" style={{ color: row.color }}>
-            {row.icon}
-            <strong>{row.side}</strong>
-            <span>{row.trades} 笔</span>
-          </div>
-          <div className="direction-value">
-            <strong style={{ color: valueColor(row.profitAbs) }}>
-              {formatMoney(row.profitAbs, run.execution.stakeCurrency, true)}
-            </strong>
-            <span>{formatPct(row.returnPct, true)}</span>
-          </div>
-          <div className="progress-track">
-            <span
-              style={{
-                width: `${Math.abs(row.profitAbs ?? 0) / maxValue * 100}%`,
-                background: valueColor(row.profitAbs),
-              }}
-            />
-          </div>
-        </div>
-      ))}
-      <div className="direction-net">
-        <span>净贡献</span>
-        <strong>{formatMoney(run.summary.profitAbs, run.execution.stakeCurrency, true)}</strong>
-      </div>
-    </div>
-  );
-}
-
-function ExitReasonChart({ rows }: { rows: SummaryRow[] }) {
-  return (
-    <div className="exit-chart">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 8, right: 4, bottom: 18, left: 0 }}>
-          <CartesianGrid stroke="#e4e8e6" vertical={false} />
-          <XAxis
-            dataKey="reason"
-            tick={{ fontSize: 10, fill: "#77817d" }}
-            axisLine={false}
-            tickLine={false}
-            interval={0}
-            tickFormatter={(value: string) => value.replace("left_", "").replace("_quantile", "")}
-          />
-          <YAxis
-            tick={{ fontSize: 10, fill: "#77817d" }}
-            axisLine={false}
-            tickLine={false}
-            width={36}
-            tickFormatter={(value: number) => `${Math.round(value / 1000)}k`}
-          />
-          <Tooltip content={<ProfitTooltip currency="USDT" labelKey="reason" />} />
-          <ReferenceLine y={0} stroke="#aeb6b2" />
-          <Bar dataKey="profitAbs" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-            {rows.map((row) => (
-              <Cell key={row.reason} fill={(row.profitAbs ?? 0) >= 0 ? POSITIVE : NEGATIVE} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 function DiagnosticRow({
   label,
   value,
@@ -1392,307 +728,6 @@ function DiagnosticRow({
   );
 }
 
-function PairTable({ rows, currency }: { rows: SummaryRow[]; currency: string }) {
-  return (
-    <div className="compact-table-wrap">
-      <table className="compact-table">
-        <thead>
-          <tr>
-            <th>交易对</th>
-            <th>交易</th>
-            <th>胜率</th>
-            <th>贡献</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.pair}>
-              <td><strong>{row.pair?.replace("/USDT:USDT", "")}</strong></td>
-              <td>{row.trades}</td>
-              <td>{formatPct(row.winRatePct)}</td>
-              <td className={(row.profitAbs ?? 0) >= 0 ? "positive" : "negative"}>
-                {formatMoney(row.profitAbs, currency, true)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PeriodTable({
-  title,
-  rows,
-  currency,
-}: {
-  title: string;
-  rows: StrategyRun["monthly"];
-  currency: string;
-}) {
-  return (
-    <div className="period-table">
-      <h3>{title}</h3>
-      {rows.map((row) => (
-        <div className="period-row" key={`${title}-${row.label}`}>
-          <span>{row.label}</span>
-          <small>{row.trades} 笔</small>
-          <strong className={(row.profitAbs ?? 0) >= 0 ? "positive" : "negative"}>
-            {formatMoney(row.profitAbs, currency, true)}
-          </strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StrategiesView({
-  data,
-  selectedRunId,
-  compareIds,
-  onCompareChange,
-  onSelectRun,
-}: {
-  data: DashboardData;
-  selectedRunId: string;
-  compareIds: string[];
-  onCompareChange: (ids: string[]) => void;
-  onSelectRun: (id: string) => void;
-}) {
-  const comparisonRuns = data.runs.filter((run) => compareIds.includes(run.id));
-  const comparisonData = useMemo(() => mergeEquity(comparisonRuns), [comparisonRuns]);
-  const scatterData = data.runs.map((run) => ({
-    id: run.id,
-    strategy: run.strategy,
-    run: shortRunId(run),
-    returnPct: run.summary.returnPct ?? 0,
-    drawdownPct: run.summary.maxDrawdownPct ?? 0,
-    trades: run.summary.trades,
-    profitFactor: run.summary.profitFactor ?? 0,
-  }));
-
-  function toggleCompare(id: string) {
-    if (compareIds.includes(id)) {
-      onCompareChange(compareIds.filter((value) => value !== id));
-      return;
-    }
-    onCompareChange([...compareIds.slice(-4), id]);
-  }
-
-  return (
-    <div className="page">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">策略对比</span>
-          <h1>运行表现矩阵</h1>
-          <p>{data.strategyCount} 个策略 · {data.runCount} 次回测</p>
-        </div>
-        <div className="tag-list">
-          <span className="tag">{compareIds.length} 个运行参与对比</span>
-        </div>
-      </div>
-
-      <div className="comparison-grid">
-        <section className="panel">
-          <PanelHeader title="收益与回撤" subtitle="点大小代表交易数量" />
-          <div className="scatter-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 14, right: 16, bottom: 18, left: 4 }}>
-                <CartesianGrid stroke="#e4e8e6" />
-                <XAxis
-                  type="number"
-                  dataKey="drawdownPct"
-                  name="最大回撤"
-                  unit="%"
-                  tick={{ fontSize: 10, fill: "#77817d" }}
-                  axisLine={false}
-                  tickLine={false}
-                  label={{ value: "最大回撤 %", position: "insideBottom", offset: -10, fill: "#77817d", fontSize: 11 }}
-                />
-                <YAxis
-                  type="number"
-                  dataKey="returnPct"
-                  name="总收益"
-                  unit="%"
-                  tick={{ fontSize: 10, fill: "#77817d" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={42}
-                />
-                <ZAxis type="number" dataKey="trades" range={[80, 360]} />
-                <ReferenceLine y={0} stroke="#aeb6b2" />
-                <Tooltip content={<ScatterTooltip />} />
-                <Scatter data={scatterData} fill={POSITIVE} isAnimationActive={false} />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-
-        <section className="panel">
-          <PanelHeader title="归一化收益曲线" subtitle="按各自初始资金计算" />
-          <div className="compare-line-chart">
-            {comparisonRuns.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={comparisonData} margin={{ top: 14, right: 12, bottom: 0, left: 0 }}>
-                  <CartesianGrid stroke="#e4e8e6" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(value: string) => value.slice(5)}
-                    tick={{ fontSize: 10, fill: "#77817d" }}
-                    axisLine={false}
-                    tickLine={false}
-                    minTickGap={30}
-                  />
-                  <YAxis
-                    tickFormatter={(value: number) => `${value}%`}
-                    tick={{ fontSize: 10, fill: "#77817d" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={38}
-                    domain={["auto", "auto"]}
-                  />
-                  <Tooltip content={<CompareTooltip runs={comparisonRuns} />} />
-                  <Legend
-                    formatter={(value: string) =>
-                      shortRunId(comparisonRuns.find((run) => run.id === value) ?? comparisonRuns[0])
-                    }
-                    wrapperStyle={{ fontSize: 10 }}
-                  />
-                  <ReferenceLine y={0} stroke="#aeb6b2" strokeDasharray="4 4" />
-                  {comparisonRuns.map((run, index) => (
-                    <Line
-                      key={run.id}
-                      type="monotone"
-                      dataKey={run.id}
-                      stroke={RUN_COLORS[index % RUN_COLORS.length]}
-                      strokeWidth={2}
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyChart label="尚未选择运行" />
-            )}
-          </div>
-        </section>
-      </div>
-
-      <section className="panel">
-        <PanelHeader title="全部策略运行" subtitle="选择最多 5 个运行叠加比较" />
-        <div className="strategy-table-wrap">
-          <table className="strategy-table">
-            <thead>
-              <tr>
-                <th className="check-column">对比</th>
-                <th>策略 / 运行</th>
-                <th>区间</th>
-                <th>收益</th>
-                <th>回撤</th>
-                <th>Profit factor</th>
-                <th>Sharpe</th>
-                <th>胜率</th>
-                <th>交易数</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.runs.map((run) => (
-                <tr key={run.id} className={run.id === selectedRunId ? "selected" : ""}>
-                  <td className="check-column">
-                    <label className="compare-check" title="加入对比">
-                      <input
-                        type="checkbox"
-                        checked={compareIds.includes(run.id)}
-                        onChange={() => toggleCompare(run.id)}
-                      />
-                      <span>{compareIds.includes(run.id) ? <Check size={13} /> : null}</span>
-                    </label>
-                  </td>
-                  <td>
-                    <button className="run-link" type="button" onClick={() => onSelectRun(run.id)}>
-                      <strong>{run.strategy}</strong>
-                      <span>{shortRunId(run)}</span>
-                    </button>
-                  </td>
-                  <td>{run.period.timeframe} · {run.period.days} 天</td>
-                  <td className={(run.summary.returnPct ?? 0) >= 0 ? "positive" : "negative"}>
-                    {formatPct(run.summary.returnPct, true)}
-                  </td>
-                  <td className="negative">{formatPct(run.summary.maxDrawdownPct)}</td>
-                  <td>{formatNumber(run.summary.profitFactor)}</td>
-                  <td>{formatNumber(run.summary.sharpe)}</td>
-                  <td>{formatPct(run.summary.winRatePct)}</td>
-                  <td>{run.summary.trades.toLocaleString("zh-CN")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function mergeEquity(runs: StrategyRun[]): Array<Record<string, string | number | null>> {
-  const byDate = new Map<string, Record<string, string | number | null>>();
-  runs.forEach((run) => {
-    run.equity.forEach((point) => {
-      const row = byDate.get(point.date) ?? { date: point.date };
-      row[run.id] = point.returnPct;
-      byDate.set(point.date, row);
-    });
-  });
-  return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-}
-
-function ScatterTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: { strategy: string; run: string; returnPct: number; drawdownPct: number; trades: number; profitFactor: number } }>;
-}) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
-  return (
-    <div className="chart-tooltip">
-      <strong>{point.strategy}</strong>
-      <small>{point.run}</small>
-      <span>收益 {formatPct(point.returnPct, true)}</span>
-      <small>回撤 {formatPct(point.drawdownPct)} · PF {formatNumber(point.profitFactor)}</small>
-      <small>{point.trades} 笔交易</small>
-    </div>
-  );
-}
-
-function CompareTooltip({
-  active,
-  payload,
-  label,
-  runs,
-}: {
-  active?: boolean;
-  payload?: Array<{ dataKey: string; value: number; color: string }>;
-  label?: string;
-  runs: StrategyRun[];
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="chart-tooltip compare-tooltip">
-      <strong>{label}</strong>
-      {payload.map((item) => {
-        const run = runs.find((candidate) => candidate.id === item.dataKey);
-        return (
-          <span key={item.dataKey} style={{ color: item.color }}>
-            {run ? shortRunId(run) : item.dataKey}: {formatPct(item.value, true)}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 function EmptyChart({ label }: { label: string }) {
   return (
     <div className="empty-chart">
@@ -1702,213 +737,110 @@ function EmptyChart({ label }: { label: string }) {
   );
 }
 
-function TradesView({ run }: { run: StrategyRun }) {
-  const [search, setSearch] = useState("");
-  const [side, setSide] = useState<"all" | "long" | "short">("all");
-  const [result, setResult] = useState<"all" | "win" | "loss">("all");
-  const [exitReason, setExitReason] = useState("all");
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
-  const exitReasons = useMemo(
-    () => [...new Set(run.trades.map((trade) => trade.exitReason))].sort(),
-    [run],
-  );
+function App() {
+  const [catalog, setCatalog] = useState<InstanceCatalog | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [selected, setSelected] = useState("");
+  const [data, setData] = useState<LiveDashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return run.trades
-      .filter((trade) => !needle || trade.pair.toLowerCase().includes(needle))
-      .filter((trade) => side === "all" || trade.side === side)
-      .filter((trade) => exitReason === "all" || trade.exitReason === exitReason)
-      .filter((trade) => {
-        if (result === "win") return (trade.profitAbs ?? 0) > 0;
-        if (result === "loss") return (trade.profitAbs ?? 0) < 0;
-        return true;
-      })
-      .sort((a, b) => b.closeDate.localeCompare(a.closeDate));
-  }, [run, search, side, result, exitReason]);
+  useEffect(() => {
+    const controller = new AbortController();
+    let busy = false;
+    async function loadCatalog() {
+      if (busy) return;
+      busy = true;
+      try {
+        const response = await fetch("/api/instances", {
+          cache: "no-store",
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
+        });
+        if (!response.ok) throw new Error(`实例列表 HTTP ${response.status}`);
+        const next = await response.json() as InstanceCatalog;
+        if (controller.signal.aborted) return;
+        setCatalog(next);
+        setCatalogError(null);
+        setSelected(previous => {
+          if (next.instances.some(instance => instance.id === previous)) return previous;
+          const requested = new URLSearchParams(window.location.search).get("instance");
+          return next.instances.find(instance => instance.id === requested)?.id ?? next.default_instance ?? "";
+        });
+      } catch (caught) {
+        if (!controller.signal.aborted) setCatalogError(caught instanceof Error ? caught.message : "实例列表不可用");
+      } finally {
+        busy = false;
+      }
+    }
+    void loadCatalog();
+    const timer = window.setInterval(() => void loadCatalog(), 10_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [refreshNonce]);
 
-  useEffect(() => setPage(1), [search, side, result, exitReason, run.id]);
+  useEffect(() => {
+    if (!selected) return;
+    const controller = new AbortController();
+    let busy = false;
+    setError(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("instance", selected);
+    window.history.replaceState(null, "", url);
+    async function loadSnapshot() {
+      if (busy) return;
+      busy = true;
+      setLoading(true);
+      try {
+        let snapshot: LiveDashboardData | null = null;
+        let failure: unknown;
+        for (let attempt = 0; attempt < 2 && !controller.signal.aborted; attempt++) {
+          try { snapshot = await requestLiveSnapshot(selected, controller.signal); break; }
+          catch (caught) { failure = caught; }
+        }
+        if (controller.signal.aborted) return;
+        if (!snapshot) throw failure;
+        if (snapshot.instance.id !== selected) throw new Error("实例数据不匹配");
+        setData(snapshot);
+        setError(null);
+      } catch (caught) {
+        if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "实时接口异常");
+      } finally {
+        busy = false;
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+    void loadSnapshot();
+    const timer = window.setInterval(() => void loadSnapshot(), 10_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [selected, refreshNonce]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const filteredPnl = filtered.reduce((sum, trade) => sum + (trade.profitAbs ?? 0), 0);
-  const filteredWins = filtered.filter((trade) => (trade.profitAbs ?? 0) > 0).length;
-
-  function downloadCsv() {
-    const columns: Array<keyof Trade> = [
-      "pair",
-      "side",
-      "openDate",
-      "closeDate",
-      "durationMinutes",
-      "profitPct",
-      "profitAbs",
-      "entryTag",
-      "exitReason",
-    ];
-    const rows = [
-      columns.join(","),
-      ...filtered.map((trade) =>
-        columns.map((column) => JSON.stringify(trade[column] ?? "")).join(","),
-      ),
-    ];
-    const url = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${run.strategy}-${shortRunId(run)}-trades.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  return (
-    <div className="page">
-      <PageHeading run={run} eyebrow="交易明细" />
-
-      <section className="trade-summary-band">
-        <div><span>筛选交易</span><strong>{filtered.length}</strong></div>
-        <div><span>筛选盈亏</span><strong className={filteredPnl >= 0 ? "positive" : "negative"}>{formatMoney(filteredPnl, run.execution.stakeCurrency, true)}</strong></div>
-        <div><span>筛选胜率</span><strong>{formatPct(filtered.length ? filteredWins / filtered.length * 100 : null)}</strong></div>
-        <div><span>平均持仓</span><strong>{formatBacktestDuration(run.summary.avgHolding)}</strong></div>
-      </section>
-
-      <section className="panel">
-        <div className="filterbar">
-          <label className="search-field">
-            <Search size={16} />
-            <input
-              type="search"
-              placeholder="搜索交易对"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <div className="segmented">
-            {(["all", "long", "short"] as const).map((value) => (
-              <button
-                key={value}
-                className={side === value ? "active" : ""}
-                type="button"
-                onClick={() => setSide(value)}
-              >
-                {value === "all" ? "全部方向" : value === "long" ? "Long" : "Short"}
-              </button>
-            ))}
-          </div>
-          <div className="segmented">
-            {(["all", "win", "loss"] as const).map((value) => (
-              <button
-                key={value}
-                className={result === value ? "active" : ""}
-                type="button"
-                onClick={() => setResult(value)}
-              >
-                {value === "all" ? "全部结果" : value === "win" ? "盈利" : "亏损"}
-              </button>
-            ))}
-          </div>
-          <label className="select-field">
-            <SlidersHorizontal size={15} />
-            <select value={exitReason} onChange={(event) => setExitReason(event.target.value)}>
-              <option value="all">全部退出原因</option>
-              {exitReasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
-            </select>
-          </label>
-          <button className="secondary-button" type="button" onClick={downloadCsv}>
-            <Download size={16} />
-            导出 CSV
-          </button>
-        </div>
-
-        <div className="trades-table-wrap">
-          <table className="trades-table">
-            <thead>
-              <tr>
-                <th>交易对</th>
-                <th>方向</th>
-                <th>开仓</th>
-                <th>平仓</th>
-                <th>持仓</th>
-                <th>收益率</th>
-                <th>盈亏</th>
-                <th>仓位</th>
-                <th>退出原因</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((trade) => (
-                <tr key={`${trade.id}-${trade.pair}-${trade.closeDate}`}>
-                  <td><strong>{trade.pair.replace("/USDT:USDT", "")}</strong><small>USDT Perp</small></td>
-                  <td><span className={`side-badge ${trade.side}`}>{trade.side}</span></td>
-                  <td>{formatDateTime(trade.openDate)}</td>
-                  <td>{formatDateTime(trade.closeDate)}</td>
-                  <td>{formatDuration(trade.durationMinutes)}</td>
-                  <td className={(trade.profitPct ?? 0) >= 0 ? "positive" : "negative"}>{formatPct(trade.profitPct, true)}</td>
-                  <td className={(trade.profitAbs ?? 0) >= 0 ? "positive" : "negative"}>{formatMoney(trade.profitAbs, run.execution.stakeCurrency, true)}</td>
-                  <td>{formatCompact(trade.stakeAmount)}</td>
-                  <td><span className="reason-label">{trade.exitReason}</span></td>
-                </tr>
-              ))}
-              {!visible.length ? (
-                <tr><td className="empty-row" colSpan={9}>没有符合条件的交易</td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-
-        <footer className="pagination">
-          <span>第 {page} / {pages} 页</span>
-          <div>
-            <button
-              className="icon-button"
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-              aria-label="上一页"
-              title="上一页"
-            >
-              <ChevronLeft size={17} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              disabled={page >= pages}
-              onClick={() => setPage((value) => Math.min(pages, value + 1))}
-              aria-label="下一页"
-              title="下一页"
-            >
-              <ChevronRight size={17} />
-            </button>
-          </div>
-        </footer>
-      </section>
-    </div>
-  );
+  const visibleData = data?.instance.id === selected ? data : null;
+  const failure = catalogError ?? error;
+  const refresh = () => setRefreshNonce(value => value + 1);
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <div className="brand-mark" aria-label="Alpha Strategy Monitor"><span className="brand-symbol">A</span><div><strong>Alpha</strong><span>Strategy Monitor</span></div></div>
+      <nav className="primary-nav" aria-label="主导航"><div className="nav-button active"><RadioTower size={18} /><span>实时模拟盘</span></div></nav>
+      <div className="sidebar-status">
+        <div className="status-line"><span className={failure ? "status-dot error" : "status-dot"} />{failure ? "实时接口异常" : visibleData ? "监控已连接" : "正在连接"}</div>
+        <span>{catalog?.instances.length ?? 0} 个本地实例</span>
+        <span>{visibleData?.summary.open_positions ?? 0} 个当前持仓</span>
+      </div>
+    </aside>
+    <main className="main-area">
+      <header className="topbar">
+        <label className="instance-control"><Server size={16} /><span>本地实例</span>
+          <select aria-label="监控实例" value={selected} disabled={!catalog?.instances.length} onChange={event => { setError(null); setSelected(event.target.value); }}>
+            {!catalog?.instances.length ? <option value="">{catalog ? "暂无实例" : "加载中"}</option> : null}
+            {catalog?.instances.map(instance => <option key={instance.id} value={instance.id}>{instance.display_name}{!instance.database_ready ? " · 未就绪" : instance.runtime_state === "running" ? " · 运行中" : ` · ${instance.runtime_state}`}</option>)}
+          </select>
+        </label>
+        <div className="topbar-meta"><span>{visibleData ? "更新于 " + formatDateTime(visibleData.generated_at) : "等待实例数据"}</span><button type="button" className={loading ? "icon-button refreshing" : "icon-button"} title="刷新数据" aria-label="刷新数据" onClick={refresh}><RefreshCw size={17} /></button></div>
+      </header>
+      {failure ? <div className="inline-alert" role="alert">实时数据刷新失败：{failure}{visibleData ? "。界面保留本实例最后一次成功快照。" : ""}<button type="button" onClick={refresh} aria-label="重试连接"><RefreshCw size={16} /></button></div> : null}
+      {catalog?.errors.length ? <div className="inline-alert" role="status">无法接入的实例：{catalog.errors.map(instance => instance.id).join("、")}</div> : null}
+      {visibleData ? <LiveView key={selected} data={visibleData} /> : failure ? <div className="loading-state">实时接口暂不可用</div> : catalog && !catalog.instances.length ? <div className="loading-state">暂无可监控的本地实例</div> : <LiveLoadingState />}
+    </main>
+  </div>;
 }
-
-function LoadingState() {
-  return (
-    <div className="state-screen">
-      <span className="state-symbol"><RefreshCw size={22} className="spin" /></span>
-      <h1>正在汇总策略结果</h1>
-      <p>读取 Freqtrade 回测归档</p>
-    </div>
-  );
-}
-
-function ErrorState({ message, retry }: { message: string; retry: () => void }) {
-  return (
-    <div className="state-screen">
-      <span className="state-symbol error"><X size={22} /></span>
-      <h1>无法载入策略结果</h1>
-      <p>{message}</p>
-      <code>uv run alpha-web3-research backtest export-dashboard-data</code>
-      <button className="primary-button" type="button" onClick={retry}>
-        <RefreshCw size={16} />
-        重试
-      </button>
-    </div>
-  );
-}
-
 export default App;

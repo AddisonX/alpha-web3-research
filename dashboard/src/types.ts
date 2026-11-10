@@ -1,158 +1,26 @@
 export type NullableNumber = number | null;
 
-export interface DashboardData {
-  schemaVersion: number;
-  generatedAt: string;
-  sourceDirectory: string;
-  archiveCount: number;
-  strategyCount: number;
-  runCount: number;
-  tradeCount: number;
-  strategies: StrategySummary[];
-  runs: StrategyRun[];
-}
-
-export interface StrategySummary {
-  name: string;
-  runCount: number;
-  latestRunId: string;
-  bestRunId: string;
-  latestReturnPct: NullableNumber;
-  latestMaxDrawdownPct: NullableNumber;
-  latestProfitFactor: NullableNumber;
-}
-
-export interface StrategyRun {
+export interface MonitoredInstance {
   id: string;
-  runId: string;
-  strategy: string;
-  archive: string;
-  generatedAt: string;
-  isLatest: boolean;
-  period: {
-    start: string;
-    end: string;
-    days: number;
-    timeframe: string;
-    timeframeDetail: string | null;
-  };
-  execution: {
-    tradingMode: string;
-    marginMode: string;
-    stakeCurrency: string;
-    stakeAmount: number | string;
-    maxOpenTrades: number;
-    stoplossPct: NullableNumber;
-    feePct: NullableNumber;
-    leverage: NullableNumber;
-  };
-  summary: {
-    startingBalance: number;
-    finalBalance: NullableNumber;
-    profitAbs: NullableNumber;
-    returnPct: NullableNumber;
-    cagrPct: NullableNumber;
-    marketChangePct: NullableNumber;
-    maxDrawdownPct: NullableNumber;
-    maxDrawdownAbs: NullableNumber;
-    walletMaxDrawdownPct: NullableNumber;
-    sharpe: NullableNumber;
-    sortino: NullableNumber;
-    calmar: NullableNumber;
-    closedTradeSharpe: NullableNumber;
-    profitFactor: NullableNumber;
-    expectancy: NullableNumber;
-    expectancyRatio: NullableNumber;
-    sqn: NullableNumber;
-    pValue: NullableNumber;
-    trades: number;
-    tradesPerDay: NullableNumber;
-    avgProfitPct: NullableNumber;
-    winRatePct: NullableNumber;
-    wins: number;
-    draws: number;
-    losses: number;
-    winningDays: number;
-    losingDays: number;
-    bestDayAbs: NullableNumber;
-    worstDayAbs: NullableNumber;
-    avgHolding: string;
-    rejectedSignals: number;
-  };
-  directions: {
-    long: DirectionSummary;
-    short: DirectionSummary;
-  };
-  equity: EquityPoint[];
-  pairPerformance: SummaryRow[];
-  exitReasons: SummaryRow[];
-  entryTags: SummaryRow[];
-  monthly: PeriodRow[];
-  weekdays: PeriodRow[];
-  trades: Trade[];
+  display_name: string;
+  strategy_id: string;
+  mode: "dry_run";
+  runtime_state: string;
+  runtime_updated_at: string | null;
+  audit_state: string;
+  entry_allowed: boolean;
+  database_ready: boolean;
 }
 
-export interface DirectionSummary {
-  trades: number;
-  profitAbs: NullableNumber;
-  returnPct: NullableNumber;
-}
-
-export interface EquityPoint {
-  date: string;
-  profitAbs: number;
-  balance: number;
-  returnPct: NullableNumber;
-  drawdownPct: number;
-}
-
-export interface SummaryRow {
-  pair?: string;
-  reason?: string;
-  tag?: string;
-  trades: number;
-  profitAbs: NullableNumber;
-  returnPct: NullableNumber;
-  avgProfitPct: NullableNumber;
-  winRatePct: NullableNumber;
-  wins: number;
-  draws: number;
-  losses: number;
-  profitFactor: NullableNumber;
-  avgDuration: string | null;
-}
-
-export interface PeriodRow {
-  label: string;
-  timestamp: number;
-  profitAbs: NullableNumber;
-  trades: number;
-  wins: number;
-  losses: number;
-  profitFactor: NullableNumber;
-}
-
-export interface Trade {
-  id: number;
-  pair: string;
-  side: "long" | "short";
-  openDate: string;
-  closeDate: string;
-  openRate: NullableNumber;
-  closeRate: NullableNumber;
-  durationMinutes: number;
-  profitAbs: NullableNumber;
-  profitPct: NullableNumber;
-  stakeAmount: NullableNumber;
-  feeOpen: NullableNumber;
-  feeClose: NullableNumber;
-  fundingFees: NullableNumber;
-  leverage: NullableNumber;
-  entryTag: string;
-  exitReason: string;
+export interface InstanceCatalog {
+  scope: "local";
+  default_instance: string | null;
+  instances: MonitoredInstance[];
+  errors: Array<{ id: string; error: string }>;
 }
 
 export interface LiveDashboardData {
+  instance: MonitoredInstance;
   schema_version: number;
   generated_at: string;
   mode: "dry_run";

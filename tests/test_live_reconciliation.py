@@ -11,12 +11,13 @@ import polars as pl
 import pytest
 from typer.testing import CliRunner
 
-from alpha_web3_research.cli import app
+from src.cli import app
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.rehearse_live_safety import rehearse
-from alpha_web3_research.live.reconciliation import audit_dry_run, publish_audit
-from alpha_web3_research.live.signals import HOUR_MS, build_signal_timeline, rank_long_only_scores
+from src.live.reconciliation import audit_dry_run, publish_audit
+from src.live.signals import HOUR_MS, build_signal_timeline
+from src.strategies.lightgbm import rank_long_only_scores
 
 NOW = datetime(2026, 7, 27, 12, 5, tzinfo=timezone.utc)
 DECISION = int(datetime(2026, 7, 27, tzinfo=timezone.utc).timestamp() * 1000)
@@ -207,7 +208,7 @@ def test_alerts_on_change_and_recovery_and_retries_failed_delivery(
 def test_audit_cli_writes_report_and_uses_blocking_exit_code(
     audit_files: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import alpha_web3_research.cli as cli
+    import src.cli as cli
 
     original_audit = cli.audit_dry_run
     monkeypatch.setattr(cli, "audit_dry_run", lambda **kwargs: original_audit(now=NOW, **kwargs))

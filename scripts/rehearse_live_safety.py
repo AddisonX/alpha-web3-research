@@ -8,8 +8,8 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from alpha_web3_research.live.reconciliation import audit_dry_run
-from alpha_web3_research.live.safety import check_entry_audit
+from src.live.reconciliation import audit_dry_run
+from src.live.safety import check_entry_audit
 
 
 def _copy_database(source: Path, destination: Path) -> None:

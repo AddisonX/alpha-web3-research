@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from alpha_web3_research.live.dashboard import (
+from src.live.dashboard import (
     LiveDashboardProvider,
     build_equity_history_response,
     history_max_drawdown_pct,

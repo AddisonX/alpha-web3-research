@@ -9,8 +9,8 @@ included in this repository.
 
 Freqtrade is an optional, separately installed GPLv3 dependency. See its
 [license](https://github.com/freqtrade/freqtrade/blob/develop/LICENSE).
-The files in `freqtrade/user_data/strategies/` implement this project's strategies
-against Freqtrade's API; they are not a vendored copy of the Freqtrade engine.
+The files in `freqtrade/strategies/` implement this project's strategies against
+Freqtrade's API; they are not a vendored copy of the Freqtrade engine.
 
 MIT is GPL-compatible, but compatibility does not remove GPL obligations. If you
 distribute a combined or derivative work with Freqtrade, comply with the applicable
@@ -21,10 +21,8 @@ See the GNU project's [compatibility explanation](https://www.gnu.org/licenses/g
 
 ## Other dependencies and data
 
-Python and JavaScript dependencies are declared in `pyproject.toml`, `uv.lock`,
-`dashboard/package.json`, and `dashboard/package-lock.json`. Consult each package's
-license before redistribution. No third-party dependency bundle is committed.
-
+Dependencies are declared in `pyproject.toml`, `uv.lock`, `dashboard/package.json`
+and `dashboard/package-lock.json`. Consult each package's license before redistribution.
 Historical exchange data, model weights, trading databases and private deployment
 artifacts are not distributed. Fetch data under its provider's applicable terms.
-The dashboard example is synthetic test data, not a historical performance claim.
+Synthetic test fixtures are not historical performance claims.

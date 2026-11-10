@@ -10,7 +10,7 @@ WorkingDirectory=/home/ubuntu/alpha-web3-research
 Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/usr/bin
 Environment=ALPHA_PROJECT_ROOT=/home/ubuntu/alpha-web3-research
 Environment=ALPHA_DASHBOARD_MARKET_DATA_SOURCE=binance_futures
-ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/uvicorn alpha_web3_research.live.dashboard:app --host 127.0.0.1 --port 8080
+ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/uvicorn src.live.dashboard:app --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 

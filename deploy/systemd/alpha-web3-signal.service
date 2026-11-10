@@ -9,4 +9,4 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/alpha-web3-research
 Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/home/ubuntu/.local/bin:/usr/bin
 Environment=OMP_NUM_THREADS=1
-ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/alpha-web3-research live generate-signals --mainnet --pairs-path freqtrade/user_data/pairs_live.json
+ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/alpha-web3-research live generate-signals --mainnet --pairs-path freqtrade/instances/tokyo-lightgbm/pairs.json

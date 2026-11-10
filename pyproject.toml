@@ -1,49 +1,40 @@
 [project]
 name = "alpha-web3-research"
 version = "0.1.0"
-description = "Web3 market factor mining, cross-sectional LightGBM research, and Freqtrade validation system."
+description = "Tokyo LightGBM long-only signal, Freqtrade dry-run and monitoring runtime."
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.12"
 dependencies = [
     "ccxt>=4.5.64",
-    "duckdb>=1.5.4",
     "fastapi>=0.116.0",
     "lightgbm>=4.6.0",
     "numpy>=2.5.0",
     "pandas>=3.0.3",
-    "plotly>=6.8.0",
     "polars>=1.42.1",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "rich>=15.0.0",
-    "scikit-learn>=1.9.0",
-    "scipy>=1.18.0",
     "typer>=0.26.8",
     "uvicorn>=0.35.0",
-    "xgboost>=3.0,<4",
 ]
 
 [project.scripts]
-alpha-web3-research = "alpha_web3_research.cli:app"
+alpha-web3-research = "src.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.11.8,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-name = "src"
+module-root = ""
+
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "pytest>=9.1.1",
 ]
 freqtrade = [
     "freqtrade==2026.6",
 ]
-research = [
-    "matplotlib>=3.10,<4",
-]
-
-[project.urls]
-Repository = "https://github.com/AddisonX/alpha-web3-research"
-Issues = "https://github.com/AddisonX/alpha-web3-research/issues"

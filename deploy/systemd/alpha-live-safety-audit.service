@@ -8,5 +8,5 @@ Type=oneshot
 User=ubuntu
 WorkingDirectory=/home/ubuntu/alpha-web3-research
 Environment=PATH=/home/ubuntu/alpha-web3-research/.venv/bin:/usr/bin
-EnvironmentFile=-/home/ubuntu/alpha-web3-research/freqtrade/user_data/safety-webhook.env
+EnvironmentFile=-/home/ubuntu/alpha-web3-research/freqtrade/instances/tokyo-lightgbm/runtime/safety-webhook.env
 ExecStart=/home/ubuntu/alpha-web3-research/.venv/bin/alpha-web3-research live audit-dry-run

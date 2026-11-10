@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 import numpy as np
 import polars as pl
 
-from alpha_web3_research.live.signals import (
+from src.live.signals import (
     HOUR_MS,
     build_decision_feature_matrix,
     build_signal_timeline,
     latest_closed_decision_timestamp,
-    rank_long_only_scores,
 )
+from src.strategies.lightgbm import rank_long_only_scores
 
 
 def _timestamp(day: int, hour: int) -> int:

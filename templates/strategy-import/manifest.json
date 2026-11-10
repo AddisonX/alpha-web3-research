@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "strategy_id": "template-momentum-long-only-v1",
+  "entrypoint": {
+    "file": "strategy.py",
+    "class": "ImportedLongOnlyStrategy"
+  },
+  "status": "template_only_not_registered",
+  "requirements": {
+    "features": ["return_1"],
+    "timeframe": "4h",
+    "lookback_bars": 40,
+    "min_closed_bars": 25
+  },
+  "metadata": {
+    "source_experiment": "template:momentum-contract-example-v1",
+    "model_count": 0,
+    "horizon_bars": 6,
+    "label_column": ""
+  },
+  "parameters": {
+    "top_fraction": 0.1,
+    "max_selected": 9
+  },
+  "compatibility": {
+    "market_data": "binance_futures_mainnet_public",
+    "execution_mode": "dry_run",
+    "rebalance_interval_hours": 24,
+    "minimum_cross_section_count": 60,
+    "target_type": "binary_long_only",
+    "allow_empty_selection": false,
+    "execution_max_open_trades": 9,
+    "execution_leverage": 1,
+    "execution_stoploss": -0.1
+  },
+  "preprocessing": {
+    "feature_order": ["return_1"],
+    "transform": "raw",
+    "missing_policy": "exclude_nonfinite_scores_and_fail_if_none"
+  },
+  "model": {
+    "kind": "none",
+    "files": [],
+    "training_start": null,
+    "training_end": null,
+    "validation_start": null,
+    "validation_end": null,
+    "label_definition": null
+  },
+  "additional_dependencies": [],
+  "performance_claim": false
+}

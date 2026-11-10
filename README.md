@@ -1,139 +1,99 @@
-# Alpha Web3 Research
+# Alpha Tokyo Runtime
 
-A reproducible crypto factor-research toolkit with versioned strategies, historical
-backtesting, Freqtrade integration, and a React monitoring dashboard.
+本目录仅保留东京服务器现有策略的运行链路，不再提供通用研究及模型训练。
 
-面向 Binance USDT 本位永续合约的研究系统：行情采集、币池构建、因子与标签、
-LightGBM/XGBoost、单因子分层诊断、组合回测和模拟盘监控。
+**协作开发以`dev`分支为准。接入外部模型与策略请先阅读[策略导入README](docs/STRATEGY_IMPORT_README.md)。**
+`main`保留旧开源研究版本；当前分支使用扁平化`src/`、策略接口和独立实例。
+仓库不包含生产模型、运行币池、交易数据库或密钥，克隆后不能直接运行原作者的东京模型。
 
-**Research software, not investment advice or a production trading guarantee.**
-Historical results are diagnostic artifacts, not evidence of repeatable returns.
+## 当前策略
 
-## Scope
+- Binance USD-M主网公共行情，Freqtrade dry-run，无真实下单。
+- 4h因子、30个输入特征、5个LightGBM模型取平均，预测未来6根bar收益。
+- 每日使用00:00 UTC开始、04:00 UTC收盘的bar，即北京时间12点后生成信号。
+- 截面前10%只多，最多9个持仓、1倍杠杆、10%止损。
+- 固定模型：`data/models/production/walk_forward_4h_h6_forward_return_20260704T123039Z/`。
+- 不改变已有预测、选币、持仓对账和安全检查规则。
 
-- CCXT and checksum-verified Binance public archives; Parquet storage and DuckDB queries.
-- Momentum/reversal, volatility, volume and liquidity-proxy factors on 1h/4h data.
-- IC/RankIC diagnostics, decile returns, correlation analysis and feature selection.
-- Versioned daily cross-sectional, hourly multi-horizon and point-in-time-universe strategies.
-- LightGBM and XGBoost experiments, chronological splits and label-boundary purging.
-- Freqtrade backtest adapters, dry-run monitoring, reconciliation and testnet safety checks.
-- React dashboard for strategy comparison, trades and live simulated equity.
+## 安装
 
-不同研究策略独立保存，不能把它们的训练区间、币池或收益口径混用。
-2023起点的动态月度币池目前是研究设计方向，尚未实现。
-
-## Quick start
-
-Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), and Node.js 22+ for the dashboard.
-LightGBM on macOS may require `brew install libomp`.
+需要Python 3.12、uv、Node.js 22+；macOS运行LightGBM需要libomp。
 
 ```bash
-git clone https://github.com/AddisonX/alpha-web3-research.git
-cd alpha-web3-research
-uv sync --frozen --group freqtrade --group research
-cp .env.example .env
-uv run --no-sync alpha-web3-research --help
+uv sync --frozen --group freqtrade
+uv run --no-sync alpha-web3-research live --help
 uv run --no-sync pytest -q
 ```
 
-Public OHLCV downloads do not require a trading API key. Access and archive coverage
-depend on the exchange and your jurisdiction; do not bypass access restrictions.
-No data download, model training or trading process starts merely by installing.
+公共行情不需要API密钥。不要将密钥写入代码或上传GitHub。
+公共回归测试使用临时合成模型，不依赖私有权重；真实生产模型测试在没有权重时跳过。
 
-## Research workflows
+## 运行
 
-Inspect the available commands before launching large downloads:
+以下默认模型命令仅适用于已经通过私有渠道准备好生产权重和币池的本机。
+新协作者请按[导入README](docs/STRATEGY_IMPORT_README.md)创建自己的策略和实例。
 
 ```bash
-uv run --no-sync alpha-web3-research data --help
-uv run --no-sync alpha-web3-research research --help
-uv run --no-sync alpha-web3-research strategies list
+# 联网生成信号，默认主网公共行情
+uv run --no-sync alpha-web3-research live generate-signals --mainnet
+uv run --no-sync alpha-web3-research live audit-dry-run
+
+# 统一启动模拟交易、信号检查和安全审计；文件锁拒绝重复启动
+uv run --no-sync python scripts/run_dryrun.py
+
+# 只读监控API
+uv run --no-sync uvicorn src.live.dashboard:app --host 127.0.0.1 --port 8080
 ```
 
-The fixed-inception-universe workflow downloads historical data and builds its own
-artifacts. It may take time and disk space:
+Freqtrade使用实例的`pairs.json`。本地模拟盘与东京独立，不共享交易历史。
 
 ```bash
-uv run --no-sync alpha-web3-research research prepare-pit-rank
-uv run --no-sync alpha-web3-research research run-pit-rank
-```
-
-Other workflows and their assumptions:
-
-| Workflow | Documentation |
-| --- | --- |
-| Data adapters and storage | [Data architecture](docs/data_architecture.md) |
-| Strategy definitions and archived runs | [Strategy registry](docs/strategy_registry.md) |
-| Hourly multi-horizon allocation | [Hourly rolling strategy](docs/hourly_rolling_strategy.md) |
-| Fixed 2025 inception universe / LightGBM | [PIT Rank64](docs/pit_rank64_strategy.md) |
-| Fixed-year, 300-tree XGBoost experiment | [PIT XGBoost](docs/pit_xgboost_2026.md) |
-| Historical Freqtrade integration | [Freqtrade guide](docs/freqtrade_strategy_guide.md) |
-
-Date-stamped scripts in `scripts/build_factor_*` reproduce specific historical
-experiments and expect the corresponding local data/model artifacts. Those artifacts
-are intentionally not included; these scripts are not a one-command fresh-clone demo.
-
-## Dashboard
-
-The repository includes a small **synthetic** backtest example, not live account data:
-
-```bash
-cp dashboard/public/data/backtests.example.json dashboard/public/data/backtests.json
 cd dashboard
 npm ci
-npm run dev
+npm run dev -- --port 4173
 ```
 
-Open the URL printed by Vite (default `http://127.0.0.1:4173`) and choose
-**策略总览** to inspect the synthetic example. The initial live tab requires a configured
-dry-run backend; an unavailable live endpoint is expected on a fresh clone.
+前端：http://127.0.0.1:4173，默认代理本机8080接口。
+顶部选择本地实例，自动发现`freqtrade/instances/`中的规范实例，持仓、订单、权益历史互相隔离。
+API后台采集所有实例权益，不依赖页面当前选择。扩展约定见[本地实例](docs/local-instances.md)。
+东京尚未部署新版多实例API，不能仅将新前端代理切回旧东京接口。
+不要公开暴露无保护API、交易数据库或密钥。
 
-For a configured local simulation, the read-only API can be started from the project root:
+## 目录
 
-```bash
-uv run --no-sync uvicorn alpha_web3_research.live.dashboard:app --host 127.0.0.1 --port 8080
-```
+| 目录 | 用途 |
+|---|---|
+| `src/data/` | 交易所连接、公共行情获取和时间处理 |
+| `src/factors/` | 现有在线因子计算，公式不变 |
+| `src/universe/rules.py` | 行情模块使用的基础资产规则 |
+| `src/live/` | 推理、信号、监控、配置、安全与对账 |
+| `src/strategies/` | 独立决策接口、默认LightGBM策略及显式注册表 |
+| `data/models/production/` | 当前5模型、manifest与指针 |
+| `freqtrade/` | 唯一运行策略、配置、币对、信号、数据库及日志 |
+| `dashboard/` | 实时持仓、订单及可缩放历史权益前端 |
+| `deploy/` | Nginx和systemd部署模板 |
+| `scripts/` | 实例启动入口、离线兼容重放、安全故障演练 |
+| `tests/` | 运行链路回归测试 |
+| `templates/strategy-import/` | 策略交付骨架、Codex提示词和离线验收测试 |
+| `docs/` | 精简记录 |
 
-The API requires locally generated signals/trade data; it does not create a simulation.
-See [deployment boundaries](docs/public_deployment.md) before exposing any endpoint.
+## 精简边界
 
-## Verification
+其他策略、训练/标签/评估模块、研究行情、分层报告、历史回测页面及测试网真实交易辅助模块均已移除。
+此分支只发布精简后的代码；不包含本地私人备份、删除日志、研究数据或运行资产。
+部署目录是示例，需自行填写域名及安装路径；提交代码不会更新或重启服务器。
 
-```bash
-uv run --no-sync pytest -q
-cd dashboard
-npm run build
-npx playwright install chromium
-npm run test:e2e
-```
+## 策略解耦
 
-Tests use temporary or synthetic data. They do not require private reports, credentials,
-the original research datasets, or a running trading account.
+`live/signals.py`仅编排；`live/market.py`准备数据，`strategies/lightgbm.py`预测选币，
+`live/signal_store.py`保存兼容的Freqtrade信号。默认运行方式和模型不变。
+策略通过`decide(context)`返回完整的只多0/1目标，不联网、不下单。
+新增策略通过显式注册及独立信号目录接入，目前另注册了兼容性验收策略`return-1-reversal-long-only-v1`，东京部署未变。
+详细契约、支持边界和隔离运行方法见[策略组件说明](docs/strategy-components.md)。
 
-## Research limitations
+让其他Codex或协作者生成兼容策略时，使用[策略导入模板](templates/strategy-import/README.md)，
+并发送其中的[Codex提示词](templates/strategy-import/CODEX_PROMPT.md)。模板未注册，不会启动交易。
 
-- The original `training.py` walk-forward metric named `target_rank_ic` uses Pearson
-  correlation. Historical reports using that name must not be interpreted as Spearman
-  RankIC. The newer factor diagnostics explicitly compute Spearman.
-- The frozen 64-factor list was selected using a 2026 correlation snapshot. Extending
-  its charts backward does not turn those results into clean holdout evidence.
-- Some legacy workflows use a current-universe snapshot and have survivorship bias.
-- Daily labels sampled every four hours overlap. Non-overlapping daily spread charts
-  and 4h correlation statistics have different sampling frequencies.
-- Simple-return sums, gross long-short spreads and compounded execution returns are
-  different quantities. Costs, funding, liquidity and execution assumptions vary by run.
-- Source gaps and delistings must remain visible. No guarantee of complete market history
-  or profitable execution is made.
+第二策略的历史重放、独立dry-run启动方式和当前网络阻塞，见[兼容性验收](docs/reversal-acceptance.md)。
 
-## Public release boundaries
-
-This is a sanitized source release. Secrets, real server addresses, SSH keys, raw market
-data, model weights, generated reports, account databases, private notes and dependency
-bundles are excluded. Deployment files are templates, not a public account or endpoint.
-Existing private deployments are neither configured nor modified by this release.
-
-## License
-
-Original project code: [MIT](LICENSE). Dependencies retain their licenses.
-Freqtrade is GPLv3; an applicable combined distribution is not MIT-only.
-Read [third-party notices](THIRD_PARTY_NOTICES.md) before redistributing integrations.
+本地东京同款模型实例位于`freqtrade/instances/tokyo-lightgbm/`，独立目录及运行方式见[本地实例说明](docs/local-instances.md)。

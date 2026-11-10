@@ -1,14 +1,16 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
-
-const backtests = JSON.parse(readFileSync(new URL("../public/data/backtests.example.json", import.meta.url), "utf8"));
 
 const liveSnapshot = {
+  instance: {
+    id: "tokyo-lightgbm", display_name: "tokyo-lightgbm", strategy_id: "tokyo-lightgbm-long-only-v1",
+    mode: "dry_run", runtime_state: "running", runtime_updated_at: null,
+    audit_state: "healthy", entry_allowed: true, database_ready: true,
+  },
   schema_version: 1,
   generated_at: "2026-07-27T11:40:00+00:00",
   mode: "dry_run",
   strategy: "AlphaCrossSectionalLiveLongOnlyStrategy",
-  market_data_source: "binance_futures_testnet",
+  market_data_source: "binance_futures",
   price_state: "healthy",
   summary: {
     starting_balance: 10000,
@@ -128,17 +130,21 @@ const liveEquityHistory = {
 };
 
 test.beforeEach(async ({ page }) => {
-  await page.route(/\/data\/backtests\.json(?:\?.*)?$/, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(backtests) }),
-  );
-  await page.route(/\/api\/live\/equity(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/instances(?:\?.*)?$/, route => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ scope: "local", default_instance: "tokyo-lightgbm", errors: [], instances: [
+      liveSnapshot.instance,
+      { ...liveSnapshot.instance, id: "return-1-reversal", display_name: "return-1-reversal", strategy_id: "return-1-reversal-long-only-v1" },
+    ] }),
+  }));
+  await page.route(/\/api\/instances\/[^/]+\/equity(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(liveEquityHistory),
     }),
   );
-  await page.route(/\/api\/live(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/instances\/[^/]+\/live(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -154,7 +160,7 @@ test("renders live dry-run monitor without horizontal page overflow", async ({ p
   });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "AlphaCrossSectionalLiveLongOnlyStrategy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "tokyo-lightgbm", exact: true })).toBeVisible();
   await expect(page.getByText("+0.48%", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "当前持仓" })).toBeVisible();
   await expect(page.locator(".live-table").first().locator("tbody tr")).toHaveCount(2);
@@ -174,8 +180,8 @@ test("renders live dry-run monitor without horizontal page overflow", async ({ p
 
 test("recovers from one transient live API failure without showing a false alarm", async ({ page }) => {
   let requests = 0;
-  await page.unroute(/\/api\/live(?:\?.*)?$/);
-  await page.route(/\/api\/live(?:\?.*)?$/, (route) => {
+  await page.unroute(/\/api\/instances\/[^/]+\/live(?:\?.*)?$/);
+  await page.route(/\/api\/instances\/[^/]+\/live(?:\?.*)?$/, (route) => {
     requests += 1;
     if (requests === 1) {
       return route.fulfill({ status: 502, body: "temporary upstream error" });
@@ -188,7 +194,7 @@ test("recovers from one transient live API failure without showing a false alarm
   });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "AlphaCrossSectionalLiveLongOnlyStrategy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "tokyo-lightgbm", exact: true })).toBeVisible();
   await expect(page.getByText("实时接口异常", { exact: true })).toHaveCount(0);
   await expect(page.locator(".inline-alert")).toHaveCount(0);
   expect(requests).toBe(2);
@@ -212,31 +218,103 @@ test("filters and zooms the complete live equity history", async ({ page }) => {
   await expect(page.getByLabel("权益数据粒度")).toHaveValue("1h");
 });
 
-test("renders strategy analytics without horizontal page overflow", async ({ page }) => {
-  const consoleErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+test("live monitor does not depend on historical archives", async ({ page }) => {
+  const historicalRequests: string[] = [];
+  page.on("request", request => {
+    if (request.url().includes("/data/backtests")) historicalRequests.push(request.url());
   });
-
   await page.goto("/");
-  await page.getByRole("button", { name: "策略总览" }).click();
-  await expect(page.getByRole("heading", { name: "SyntheticExampleStrategy" })).toBeVisible();
-  await expect(page.getByLabel("核心指标").getByText("+3.00%", { exact: true })).toBeVisible();
-  await expect(page.locator(".recharts-wrapper svg")).toHaveCount(3);
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
-  ).toBe(false);
-  expect(consoleErrors).toEqual([]);
+  await expect(page.getByRole("heading", { name: "当前持仓" })).toBeVisible();
+  await expect(page.getByText("策略对比", { exact: true })).toHaveCount(0);
+  expect(historicalRequests).toEqual([]);
 });
 
-test("switches between comparison and filtered trade views", async ({ page }) => {
+test("initial API failure exposes retry instead of infinite loading", async ({ page }) => {
+  await page.unroute(/\/api\/instances\/[^/]+\/live(?:\?.*)?$/);
+  await page.route(/\/api\/instances\/[^/]+\/live(?:\?.*)?$/, route => route.fulfill({ status: 503, body: "offline" }));
   await page.goto("/");
-  await page.getByRole("button", { name: "策略对比" }).click();
-  await expect(page.getByRole("heading", { name: "运行表现矩阵" })).toBeVisible();
-  expect(await page.locator(".strategy-table tbody tr").count()).toBeGreaterThan(0);
-
-  await page.getByRole("button", { name: "交易明细" }).click();
-  await page.getByPlaceholder("搜索交易对").fill("BTC");
-  await expect(page.locator(".trades-table tbody tr").first()).toContainText("BTC");
-  await expect(page.locator(".trades-table tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("alert")).toContainText("HTTP 503");
+  await expect(page.getByRole("button", { name: "重试连接" })).toBeVisible();
 });
+
+test("switches positions and equity history without mixing instances", async ({ page }) => {
+  await page.route("**/api/instances/return-1-reversal/live?*", route => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ ...liveSnapshot,
+      instance: { ...liveSnapshot.instance, id: "return-1-reversal", display_name: "return-1-reversal" },
+      signal: { ...liveSnapshot.signal, model_count: 0 },
+      summary: { ...liveSnapshot.summary, equity: 9876.54, return_pct: -1.2346 },
+      positions: [liveSnapshot.positions[0]],
+    }),
+  }));
+  await page.route("**/api/instances/return-1-reversal/equity?*", route => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ ...liveEquityHistory, total_points: 3, points: liveSnapshot.equity_history.slice(0, 3) }),
+  }));
+  await page.goto("/");
+  await expect(page.getByText("48 个完整快照", { exact: false })).toBeVisible();
+  await page.getByLabel("监控实例").selectOption("return-1-reversal");
+  await expect(page.getByRole("heading", { name: "return-1-reversal", exact: true })).toBeVisible();
+  await expect(page.getByText("-1.23%", { exact: true })).toBeVisible();
+  await expect(page.getByText("规则策略", { exact: true })).toBeVisible();
+  await expect(page.locator(".live-table").first().locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByText("3 个完整快照", { exact: false })).toBeVisible();
+  await page.getByLabel("监控实例").selectOption("tokyo-lightgbm");
+  await expect(page.getByText("+0.48%", { exact: true })).toBeVisible();
+  await expect(page.getByText("48 个完整快照", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+});
+
+test("discovers additional instances without changing the page", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByLabel("监控实例").locator("option")).toHaveCount(2);
+  await page.route(/\/api\/instances(?:\?.*)?$/, route => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ scope: "local", default_instance: "tokyo-lightgbm", errors: [], instances: [
+      liveSnapshot.instance,
+      { ...liveSnapshot.instance, id: "return-1-reversal", display_name: "return-1-reversal" },
+      { ...liveSnapshot.instance, id: "new-strategy", display_name: "new-strategy" },
+    ] }),
+  }));
+  await page.getByRole("button", { name: "刷新数据" }).click();
+  await expect(page.getByLabel("监控实例").locator("option")).toHaveCount(3);
+  await expect(page.getByLabel("监控实例")).toHaveValue("tokyo-lightgbm");
+});
+
+test("handles an empty catalog without fabricating account data", async ({ page }) => {
+  await page.route(/\/api\/instances(?:\?.*)?$/, route => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ scope: "local", default_instance: null, instances: [], errors: [] }),
+  }));
+  await page.goto("/");
+  await expect(page.getByText("暂无可监控的本地实例")).toBeVisible();
+  await expect(page.getByLabel("监控实例")).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "实时权益曲线" })).toHaveCount(0);
+});
+
+test("a late response from the previous instance cannot overwrite the new one", async ({ page }) => {
+  let release: () => void = () => undefined;
+  let blocked = false;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/instances/tokyo-lightgbm/live?*", async route => {
+    blocked = true;
+    await gate;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(liveSnapshot) }).catch(() => undefined);
+  });
+  await page.route("**/api/instances/return-1-reversal/live?*", route => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ ...liveSnapshot,
+      instance: { ...liveSnapshot.instance, id: "return-1-reversal", display_name: "return-1-reversal" },
+      summary: { ...liveSnapshot.summary, return_pct: -1.2346 },
+    }),
+  }));
+  await page.goto("/");
+  await expect.poll(() => blocked).toBe(true);
+  await page.getByLabel("监控实例").selectOption("return-1-reversal");
+  await expect(page.getByRole("heading", { name: "return-1-reversal", exact: true })).toBeVisible();
+  release();
+  await page.waitForTimeout(200);
+  await expect(page.getByText("-1.23%", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "tokyo-lightgbm", exact: true })).toHaveCount(0);
+});
+

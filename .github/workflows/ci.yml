@@ -15,8 +15,9 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
-      - run: uv sync --frozen --group freqtrade --group research
-      - run: uv run --frozen --group freqtrade --group research pytest -q
+      - run: sudo apt-get update && sudo apt-get install -y libgomp1
+      - run: uv sync --frozen --group freqtrade
+      - run: uv run --no-sync pytest -q
   dashboard:
     runs-on: ubuntu-latest
     defaults:
