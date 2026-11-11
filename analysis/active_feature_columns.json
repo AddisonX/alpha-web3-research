@@ -1,0 +1,17 @@
+[
+  "market_cap_mean_10d",
+  "market_cap_mean_20d",
+  "market_cap_mean_30d",
+  "market_cap_mean_40d",
+  "mean_return_4",
+  "range_to_quote_volume_2",
+  "return_6",
+  "turnover_relative_volume_42",
+  "volume_change_12",
+  "volume_change_24",
+  "avg_range_4",
+  "distance_to_low_6",
+  "avg_range_3",
+  "distance_to_low_4",
+  "volatility_4"
+]

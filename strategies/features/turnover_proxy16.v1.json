@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "feature_set_id": "turnover_proxy16@v1",
+  "description": "Relative turnover and trading-activity proxies computed from historical base volume and prices.",
+  "timeframe": "4h",
+  "window_unit": "bars",
+  "definitions": {
+    "V": "base traded volume in a closed bar",
+    "R": "close / previous close - 1 within a continuous timestamp segment",
+    "turnover_relative_volume_W": "V[t] / mean(V[t-W:t]); the baseline excludes the current bar",
+    "turnover_relative_daily_W": "sum(V[t-5:t+1]) / (6 * mean(V[t-5-W:t-5])); disjoint 24h and baseline windows",
+    "turnover_volume_cv_W": "sample_std(V over last W bars, ddof=1) / mean(V over last W bars)",
+    "turnover_volume_maxshare_W": "max(V over last W bars) / sum(V over last W bars)",
+    "turnover_directional_W": "sum(sign(R) * V over last W bars) / sum(V over last W bars)",
+    "turnover_price_corr_W": "Pearson correlation(V, R) over last W bars",
+    "turnover_return_premium_W": "sum(V * R) / sum(V) - mean(R), over last W bars"
+  },
+  "missing_values": "Require complete windows, restart after gaps, and return null for zero denominators or undefined correlations.",
+  "features": [
+    "turnover_directional_180",
+    "turnover_directional_42",
+    "turnover_directional_6",
+    "turnover_price_corr_180",
+    "turnover_price_corr_42",
+    "turnover_relative_daily_180",
+    "turnover_relative_daily_42",
+    "turnover_relative_volume_180",
+    "turnover_relative_volume_42",
+    "turnover_relative_volume_6",
+    "turnover_return_premium_180",
+    "turnover_return_premium_42",
+    "turnover_volume_cv_180",
+    "turnover_volume_cv_42",
+    "turnover_volume_maxshare_180",
+    "turnover_volume_maxshare_42"
+  ]
+}

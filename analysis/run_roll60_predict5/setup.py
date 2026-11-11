@@ -1,0 +1,27 @@
+from pathlib import Path
+R=Path(__file__).resolve().parents[2]; O=Path(__file__).resolve().parent
+for count in [15,19]:
+ dest=O/f'case{count}';dest.mkdir(exist_ok=True)
+ s=(R/'analysis/run_rolling2m/train.py').read_text(encoding='utf-8')
+ s=s.replace('/workspace/xgb16run/data/model_tables/factors15_2021_2026','/tmp/xgb22run/data/model_tables/factors19alpha_2021_2026')
+ s=s.replace('/tmp/xgb15_rolling2m_120_lr005',f'/tmp/xgb{count}_roll60_predict5_100_lr005')
+ s=s.replace("features=json.loads((BASE/'feature_columns.json').read_text());assert len(features)==15",f"features=json.loads((BASE/'feature_columns.json').read_text())[:{count}];assert len(features)=={count}")
+ s=s.replace('import json,time','import json,time,os,sys\nsys.path.insert(0,"/tmp/roll60predict5code")\nfrom mask_window import apply_mask\nMASK=os.environ["IC_MASK"]=="1"')
+ s=s.replace("hist=pd.concat([train,test],ignore_index=True).sort_values(['entry_time_utc','symbol']);", "hist=pd.concat([train,test],ignore_index=True).sort_values(['entry_time_utc','symbol']);")
+ s=s.replace(' for month in range(1,13 if year<2026 else 11):\n  boundary=pd.Timestamp(year=year,month=month,day=1,tz=\'Asia/Shanghai\');start=boundary-pd.DateOffset(months=2);end=boundary+pd.DateOffset(months=1)', ' boundaries=pd.date_range(f"{year}-01-01",min(f"{year}-12-31","2026-10-27"),freq="5D",tz="Asia/Shanghai")\n for month,boundary in enumerate(boundaries,1):\n  start=boundary-pd.Timedelta(days=60);end=min(boundary+pd.Timedelta(days=5),pd.Timestamp(f"{year+1}-01-01",tz="Asia/Shanghai"))')
+ s=s.replace('  before=time.perf_counter();model=', '  if MASK:apply_mask(hist,fit,features,start,boundary,ydir/month.__str__())\n  before=time.perf_counter();model=')
+ s=s.replace('num_boost_round=120','num_boost_round=100').replace('==120','==100').replace('trees=120','trees=100')
+ s=s.replace("f'{year}-{month:02d}'","boundary.strftime('%Y-%m-%d')")
+ s=s.replace("forecast=pd.concat(predictions).sort_values", "forecast=pd.concat(predictions,ignore_index=True).sort_values")
+ s=s.replace("monthly_training_records.csv","rolling_training_records.csv")
+ s=s.replace('Previous2 full Beijing calendar months; monthly independent fit; use prediction-year fixedpool historical percentiles and price excess labels; no funding factors','Previous60 calendar days; independently fit every5 days; blocks anchored Jan1 Beijing eachyear and truncated at yearend; annualpool percentiles; excess return target')
+ s=s.replace('Training label price timestamp no later than month boundary','Training label price timestamp no later than block boundary')
+ s=s.replace('models=len(records),monthly_records=records','mask_enabled=MASK,models=len(records),rolling_records=records')
+ (dest/'train.py').write_text(s,encoding='utf-8')
+ for name in ['holdings.py','net.py','buffer.py']:
+  s=(R/'analysis/run_xgb19alpha_300'/name).read_text(encoding='utf-8')
+  s=s.replace('xgb19alpha_gpu_expanding_300_depth4_lr005_2022_2026',f'xgb{count}_roll60_predict5_100_lr005')
+  s=s.replace('xgb19alpha_300_lr005',f'xgb{count}_roll60_predict5_100_lr005')
+  s=s.replace('/tmp/xgb19alphacode300/',f'/tmp/roll60predict5code/case{count}/')
+  (dest/name).write_text(s,encoding='utf-8')
+print('Prepared both cases; IC_MASK must be explicitly selected at runtime.')
