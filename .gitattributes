@@ -1,0 +1,8 @@
+# Published XGB15 artifacts must retain identical bytes across operating systems.
+/data/models/strategies/xgb15-120-long-short-v1/v1/*.ubj binary
+/data/models/strategies/xgb15-120-long-short-v1/v1/manifest.json text eol=lf
+/data/imports/xgb15/*.parquet binary
+/data/imports/xgb15/asset_mapping.json text eol=lf
+/data/imports/xgb15/pairs.json text eol=lf
+/data/imports/xgb15/acceptance.json text eol=lf
+/data/imports/xgb15/bundle_manifest.json text eol=lf

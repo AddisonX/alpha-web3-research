@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "strategy_id": "xgb15-120-long-short-v1",
+  "published_scope": "Explicitly requested runtime weights, pools, cap history, original mapping, and independent historical acceptance fixtures",
+  "caps_first_date": "2021-01-01",
+  "caps_last_date": "2026-11-05",
+  "annual_pool_counts": {
+    "2022": 79,
+    "2023": 78,
+    "2024": 143,
+    "2025": 209,
+    "2026": 297
+  },
+  "files": {
+    "data/models/strategies/xgb15-120-long-short-v1/v1/model_2022.ubj": {
+      "sha256": "d2dbbf9aeab4cb14a4bc2aed5a8dc518cc1196991a963f0a05746b9a2606fd8d",
+      "bytes": 203289
+    },
+    "data/models/strategies/xgb15-120-long-short-v1/v1/model_2023.ubj": {
+      "sha256": "5b8795370341b2034e7f8ba42b8b1a2c120cb5199ef8f5a50d838d5175c83285",
+      "bytes": 203220
+    },
+    "data/models/strategies/xgb15-120-long-short-v1/v1/model_2024.ubj": {
+      "sha256": "df285804e075c205e626093be4279045630304d047abaf54ac9aa861db58c539",
+      "bytes": 201996
+    },
+    "data/models/strategies/xgb15-120-long-short-v1/v1/model_2025.ubj": {
+      "sha256": "59a04a543a82eca76e7b8c21d302beb93213e67776a34539c942c93cd3f81d72",
+      "bytes": 202813
+    },
+    "data/models/strategies/xgb15-120-long-short-v1/v1/model_2026.ubj": {
+      "sha256": "0b21396df6dee7bd596405ca393a19d55e912608252536ec4e0ad28e39c7bd99",
+      "bytes": 204514
+    },
+    "data/models/strategies/xgb15-120-long-short-v1/v1/manifest.json": {
+      "sha256": "7625dcbae75c929d69099e109ff3b8600e8e3892af1875701307f309110ea185",
+      "bytes": 25001
+    },
+    "data/imports/xgb15/pairs.json": {
+      "sha256": "38e5c88cf1eefa9c6d818ad450935efd186e0fabddf5c0f47ec822f98bc01b42",
+      "bytes": 5918
+    },
+    "data/imports/xgb15/caps.parquet": {
+      "sha256": "27bd190b5a15eea5168b4a8dec655e71344b21fd300f9a8df4efc0ca78c2ba7f",
+      "bytes": 9992349
+    },
+    "data/imports/xgb15/asset_mapping.json": {
+      "sha256": "4fe37772b67216107635ebfb7d025d3a62458177538bcb2dee60fb8d1b916516",
+      "bytes": 247567
+    },
+    "data/imports/xgb15/acceptance.json": {
+      "sha256": "e913f6c6442f72511ff621122d1e93c5fb89aa62d66af18f1e869b09b1bc0651",
+      "bytes": 997
+    },
+    "data/imports/xgb15/acceptance_features.parquet": {
+      "sha256": "529490e8ecbf2ac64462f6ff3aa9b58456a01bf8702ac68d80541a8e27fdd305",
+      "bytes": 39533
+    },
+    "data/imports/xgb15/acceptance_previous_targets.parquet": {
+      "sha256": "b01092b68f625c7afa0a68622036fd127853f5b5f956a0260596ea9680e3a6be",
+      "bytes": 4667
+    },
+    "data/imports/xgb15/acceptance_expected_predictions.parquet": {
+      "sha256": "35a0803fc1810b85cc3a5bfdc745b8f4f048a0facd7509188f0a511526442a88",
+      "bytes": 6433
+    },
+    "data/imports/xgb15/acceptance_bars.parquet": {
+      "sha256": "b1de0831b2f59a0617e8159c6dcd2a161a59e1ec2b6495322f4fa4915b2158b7",
+      "bytes": 831669
+    }
+  },
+  "complete_40_day_cap_assets_at_last_date": 291
+}
