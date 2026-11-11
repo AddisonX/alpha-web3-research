@@ -121,7 +121,7 @@ class AlphaCrossSectionalLiveLongOnlyStrategy(IStrategy):
             status = json.loads(cls._status_path().read_text(encoding="utf-8"))
             if not isinstance(status, dict):
                 raise ValueError("status must be a JSON object")
-            health = check_live_signal_status(status, now)
+            health = check_live_signal_status(status, now, allow_short=cls.can_short)
         except (OSError, ValueError, TypeError) as exc:
             health = LiveSignalHealth(False, f"cannot read signal status: {exc}")
         if health.ready:
@@ -151,6 +151,8 @@ class AlphaCrossSectionalLiveLongOnlyStrategy(IStrategy):
             health.valid_until,
             health.selected_pairs,
             health.cross_section_count,
+            health.allow_short,
+            health.short_pairs,
         )
         if key == cls._validated_key:
             return cls._validation_error
@@ -185,6 +187,7 @@ class AlphaCrossSectionalLiveLongOnlyStrategy(IStrategy):
                     "signal_valid",
                     "is_rebalance",
                     "target_position",
+                    *(["target_weight"] if cls.can_short else []),
                     "model_score",
                     "model_score_rank_pct",
                 ],
@@ -292,7 +295,8 @@ class AlphaCrossSectionalLiveLongOnlyStrategy(IStrategy):
             logger.error("Real-money entry blocked: live execution has not passed safety preflight")
             return False
         health = self._health(current_time)
-        if not health.ready or side != "long" or pair not in health.selected_pairs:
+        expected_side = "short" if pair in health.short_pairs else "long"
+        if not health.ready or side != expected_side or (side == "short" and not self.can_short) or pair not in health.selected_pairs:
             return False
         audit_path = os.environ.get("ALPHA_LIVE_AUDIT_PATH")
         if audit_path:
@@ -320,10 +324,13 @@ class AlphaCrossSectionalLiveLongOnlyStrategy(IStrategy):
         if not (
             self._recent_candle(row, current_time)
             and self._row_matches_decision(row, health, current_time)
-            and row["target_position"] == 1
+            and row["target_position"] == (-1 if side == "short" else 1)
             and row["volume"] > 0
         ):
             return False
+
+        if self.can_short:
+            return True  # A direction change may close and reopen in the same decision.
 
         # A stopped-out target must not be reopened until the next model decision.
         from freqtrade.persistence import Trade

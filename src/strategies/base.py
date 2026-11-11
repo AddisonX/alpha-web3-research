@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+import math
 
 import polars as pl
 
@@ -34,14 +35,17 @@ class StrategyMetadata:
 class StrategyContext:
     decision_timestamp: int
     features: pl.DataFrame
+    allow_short: bool = False
+    previous_targets: pl.DataFrame | None = None
 
 
 @dataclass(frozen=True)
 class StrategyDecision:
-    """Complete long-only target: every input symbol must appear exactly once."""
+    """Complete targets; signed weights require explicit opt-in on both sides."""
 
     decision_timestamp: int
     targets: pl.DataFrame
+    allow_short: bool = False
 
     def validate(self, context: StrategyContext) -> None:
         if self.decision_timestamp != context.decision_timestamp:
@@ -55,6 +59,11 @@ class StrategyDecision:
                 or len(pairs) != len(set(pairs)) or set(pairs) != set(expected)):
             raise ValueError("decision must contain each context symbol exactly once")
         targets = self.targets["target_position"].to_list()
+        if self.allow_short:
+            if not context.allow_short:
+                raise ValueError("short targets require an explicitly enabled strategy")
+            validate_signed_weights(self.targets)
+            return
         if any(value is None or value not in (0, 1) for value in targets):
             raise ValueError("only long-only binary targets are supported")
         if not any(targets):
@@ -67,3 +76,22 @@ class LongOnlyStrategy(Protocol):
     metadata: StrategyMetadata
 
     def decide(self, context: StrategyContext) -> StrategyDecision: ...
+
+
+def validate_signed_weights(targets: pl.DataFrame) -> None:
+    """Signed, unlevered, equal-weight 50/50 targets; zeros cover unselected coins."""
+    if "target_weight" not in targets.columns:
+        raise ValueError("short targets require target_weight")
+    positions = targets["target_position"].to_list()
+    weights = targets["target_weight"].to_list()
+    if any(p not in (-1, 0, 1) for p in positions):
+        raise ValueError("invalid signed target")
+    if any(w is None or not math.isfinite(w) or (1 if w > 0 else -1 if w < 0 else 0) != p
+           for p, w in zip(positions, weights)):
+        raise ValueError("invalid target weight or direction")
+    for sign in (-1, 1):
+        side = [abs(w) for p, w in zip(positions, weights) if p == sign]
+        if not side or not math.isclose(sum(side), .5, abs_tol=1e-9):
+            raise ValueError("each side must sum to 50 percent")
+        if any(not math.isclose(w, .5 / len(side), abs_tol=1e-9) for w in side):
+            raise ValueError("each side must be equal weighted")

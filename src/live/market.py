@@ -36,6 +36,16 @@ class MarketDataProvider:
         self, pairs: list[str], decision_timestamp: int, requirements: DataRequirements,
     ) -> PreparedMarket:
         timeframe_ms = int(self.exchange.parse_timeframe(requirements.timeframe) * 1000)
+        from src.strategies.xgb15 import FEATURES
+        caps = None
+        if requirements.features == FEATURES:
+            import pandas as pd
+            cap_path = self.settings.resolved_data_path() / "imports/xgb15/caps.parquet"
+            caps = pd.read_parquet(cap_path)
+            close_time = pd.Timestamp(decision_timestamp + timeframe_ms, unit="ms", tz="UTC")
+            required_date = (close_time - pd.Timedelta(hours=24)).floor("D").tz_localize(None) - pd.Timedelta(days=1)
+            if not pd.to_datetime(caps.date).eq(required_date).any():
+                raise MarketDataError(f"market cap source date {required_date.date()} is missing; OHLCV fetch not started", {})
         since_ms = decision_timestamp - (requirements.lookback_bars - 1) * timeframe_ms
         until_ms = decision_timestamp + timeframe_ms
         fetcher = OHLCVFetcher(exchange=self.exchange, settings=self.settings)
@@ -57,6 +67,14 @@ class MarketDataProvider:
                 errors[pair] = f"{type(exc).__name__}: {exc}"
         if not frames:
             raise MarketDataError("no OHLCV frames were fetched", errors)
+        if requirements.features == FEATURES:
+            from src.factors.xgb15 import build_xgb15_features
+            raw = pl.concat(frames, how="diagonal_relaxed").to_pandas()
+            matrix = build_xgb15_features(raw, caps, decision_timestamp, pairs)
+            matrix = matrix.dropna(subset=list(FEATURES))
+            if matrix.empty:
+                raise MarketDataError("no complete XGB15 features; check point-in-time cap coverage", errors)
+            return PreparedMarket(pl.from_pandas(matrix), len(pairs), errors)
         factors = FactorBuilder(self.settings)._build_factor_long_frame(
             pl.concat(frames, how="diagonal_relaxed")
         )

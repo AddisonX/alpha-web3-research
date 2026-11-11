@@ -1,0 +1,123 @@
+{
+  "strategy_id": "xgb15-120-long-short-v1",
+  "features": [
+    "market_cap_mean_10d",
+    "market_cap_mean_20d",
+    "market_cap_mean_30d",
+    "market_cap_mean_40d",
+    "mean_return_4",
+    "range_to_quote_volume_2",
+    "return_6",
+    "turnover_relative_volume_42",
+    "volume_change_12",
+    "volume_change_24",
+    "avg_range_4",
+    "distance_to_low_6",
+    "avg_range_3",
+    "distance_to_low_4",
+    "volatility_4"
+  ],
+  "preprocessing": "percentile_average",
+  "models": {
+    "2022": {
+      "file": "model_2022.ubj",
+      "sha256": "d2dbbf9aeab4cb14a4bc2aed5a8dc518cc1196991a963f0a05746b9a2606fd8d",
+      "fit_cutoff_utc": "2022-01-01T00:00:00+00:00",
+      "training_years": [
+        2021
+      ],
+      "training_rows": 25043,
+      "validated_daily_deciles": 361,
+      "provenance": "first 120 trees of same-parameter GPU 200-tree fit; all reference daily deciles and Rank IC matched at 1e-12"
+    },
+    "2023": {
+      "file": "model_2023.ubj",
+      "sha256": "5b8795370341b2034e7f8ba42b8b1a2c120cb5199ef8f5a50d838d5175c83285",
+      "fit_cutoff_utc": "2023-01-01T00:00:00+00:00",
+      "training_years": [
+        2021,
+        2022
+      ],
+      "training_rows": 47816,
+      "validated_daily_deciles": 364,
+      "provenance": "first 120 trees of same-parameter GPU 200-tree fit; all reference daily deciles and Rank IC matched at 1e-12"
+    },
+    "2024": {
+      "file": "model_2024.ubj",
+      "sha256": "df285804e075c205e626093be4279045630304d047abaf54ac9aa861db58c539",
+      "fit_cutoff_utc": "2024-01-01T00:00:00+00:00",
+      "training_years": [
+        2021,
+        2022,
+        2023
+      ],
+      "training_rows": 128913,
+      "validated_daily_deciles": 365,
+      "provenance": "first 120 trees of same-parameter GPU 200-tree fit; all reference daily deciles and Rank IC matched at 1e-12"
+    },
+    "2025": {
+      "file": "model_2025.ubj",
+      "sha256": "59a04a543a82eca76e7b8c21d302beb93213e67776a34539c942c93cd3f81d72",
+      "fit_cutoff_utc": "2025-01-01T00:00:00+00:00",
+      "training_years": [
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "training_rows": 204106,
+      "validated_daily_deciles": 363,
+      "provenance": "first 120 trees of same-parameter GPU 200-tree fit; all reference daily deciles and Rank IC matched at 1e-12"
+    },
+    "2026": {
+      "file": "model_2026.ubj",
+      "sha256": "0b21396df6dee7bd596405ca393a19d55e912608252536ec4e0ad28e39c7bd99",
+      "fit_cutoff_utc": "2026-01-01T00:00:00+00:00",
+      "training_years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "training_rows": 301529,
+      "validated_daily_deciles": 299,
+      "provenance": "first 120 trees of same-parameter GPU 200-tree fit; all reference daily deciles and Rank IC matched at 1e-12"
+    }
+  },
+  "xgboost_version": "3.4.1",
+  "params": {
+    "objective": "reg:squarederror",
+    "tree_method": "hist",
+    "device": "cuda:0",
+    "max_depth": 4,
+    "eta": 0.05,
+    "subsample": 1.0,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 1.0,
+    "lambda": 1.0,
+    "alpha": 0.0,
+    "max_bin": 256,
+    "seed": 42,
+    "nthread": 4,
+    "eval_metric": "rmse"
+  },
+  "rounds": 120,
+  "label": "BJT 00:00 to next BJT 00:00 return minus fixed annual pool available-return equal weight mean",
+  "missing": "rank each available factor independently; predict only complete rows; never filter predictions by outcomes",
+  "annual_pool": "target-year pool, selected using complete previous-year history; known from January 1 UTC",
+  "portfolio": {
+    "long": 0.5,
+    "short": -0.5,
+    "entry_fraction": 0.1,
+    "retention_fraction": 0.3,
+    "rebalance": "daily equal weight BJT 00:00",
+    "fee": 0.0005
+  },
+  "limitations": [
+    "ten factors selected using 2021-2025 performance; historical test years overlap feature selection",
+    "reported historical inputs may be revised",
+    "zero-latency entry-price labels do not model post-close compute/execution delays",
+    "missing outcome dates excluded from metrics; delisting/forced-settlement losses not independently reconstructed"
+  ]
+}

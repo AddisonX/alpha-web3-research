@@ -1,6 +1,8 @@
 import json
 import os
+import pytest
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
@@ -26,7 +28,7 @@ def make_instance(root, name, wallet=10000, profit=100):
         "supervisor_pid": os.getpid(), "worker_pid": os.getpid(),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }))
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("""CREATE TABLE trades (
             id INTEGER, pair TEXT, is_open INTEGER, fee_open REAL, fee_open_cost REAL,
             fee_close REAL, fee_close_cost REAL, open_rate REAL, close_rate REAL,
@@ -92,6 +94,25 @@ def test_missing_database_is_not_an_empty_healthy_wallet(tmp_path):
         assert client.get("/api/instances/one/live").status_code == 409
 
 
+def test_historical_curve_is_separate_from_live_wallet(tmp_path):
+    directory = make_instance(tmp_path, "xgb15-paper")
+    (directory / "instance.json").write_text(json.dumps({"layout": "structured", "strategy_id": "xgb15-120-long-short-v1"}))
+    (directory / "database/trades.dryrun.sqlite").unlink()
+    make_instance(tmp_path, "another-strategy")
+    report = tmp_path / "data/imports/xgb15/history_2026.json"
+    report.parent.mkdir(parents=True)
+    report.write_text(json.dumps({"kind": "historical_backtest", "strategy_id": "xgb15-120-long-short-v1", "points": [{"date": "2026-01-01", "equity": 1.}]}))
+    with TestClient(create_app(tmp_path, start_sampler=False)) as client:
+        assert client.get("/api/instances/xgb15-paper/live").status_code == 409
+        history = client.get("/api/instances/xgb15-paper/backtest")
+        assert history.status_code == 200
+        assert history.json()["kind"] == "historical_backtest"
+        assert client.get("/api/instances/another-strategy/backtest").status_code == 404
+        assert client.get("/api/instances/missing/backtest").status_code == 404
+        report.write_text(json.dumps({"kind": "live", "strategy_id": "xgb15-120-long-short-v1"}))
+        assert client.get("/api/instances/xgb15-paper/backtest").status_code == 503
+
+
 def test_stale_heartbeat_and_path_escape(tmp_path):
     directory = make_instance(tmp_path, "one")
     runtime_path = directory / "runtime/runtime_status.json"
@@ -101,7 +122,12 @@ def test_stale_heartbeat_and_path_escape(tmp_path):
     instances, _ = discover_instances(tmp_path)
     assert instances["one"].metadata()["runtime_state"] == "unknown"
     assert instances["one"].metadata()["entry_allowed"] is False
-    (directory.parent / "linked").symlink_to(directory, target_is_directory=True)
+    try:
+        (directory.parent / "linked").symlink_to(directory, target_is_directory=True)
+    except OSError as error:
+        if getattr(error, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege unavailable")
+        raise
     instances, errors = discover_instances(tmp_path)
     assert "linked" not in instances
     assert errors[0]["id"] == "linked"
@@ -111,11 +137,11 @@ def test_sampling_collects_unselected_instances_and_survives_one_failure(tmp_pat
     make_instance(tmp_path, "one")
     second = make_instance(tmp_path, "two")
     broken = make_instance(tmp_path, "broken")
-    with sqlite3.connect(broken / "database/trades.dryrun.sqlite") as connection:
+    with closing(sqlite3.connect(broken / "database/trades.dryrun.sqlite")) as connection, connection:
         connection.execute("DROP TABLE trades")
     monitor = InstanceMonitor(tmp_path, lambda _: {})
     monitor.sample_all()
-    with sqlite3.connect(second / "database/equity_history.sqlite") as connection:
+    with closing(sqlite3.connect(second / "database/equity_history.sqlite")) as connection, connection:
         assert connection.execute("SELECT COUNT(*) FROM equity_history").fetchone()[0] == 1
     with TestClient(create_app(tmp_path, start_sampler=False)) as client:
         assert client.get("/api/instances/broken/live").status_code == 503
@@ -124,7 +150,7 @@ def test_sampling_collects_unselected_instances_and_survives_one_failure(tmp_pat
 
 def test_incomplete_prices_do_not_write_false_equity_history(tmp_path):
     directory = make_instance(tmp_path, "one")
-    with sqlite3.connect(directory / "database/trades.dryrun.sqlite") as connection:
+    with closing(sqlite3.connect(directory / "database/trades.dryrun.sqlite")) as connection, connection:
         connection.execute("UPDATE trades SET is_open = 1")
     with TestClient(create_app(tmp_path, price_loader=lambda _: {}, start_sampler=False)) as client:
         result = client.get("/api/instances/one/live").json()
@@ -135,10 +161,7 @@ def test_incomplete_prices_do_not_write_false_equity_history(tmp_path):
 def test_dead_process_cannot_be_reported_as_running(tmp_path, monkeypatch):
     make_instance(tmp_path, "one")
 
-    def missing_process(pid, signal):
-        raise ProcessLookupError
-
-    monkeypatch.setattr("src.live.monitoring.os.kill", missing_process)
+    monkeypatch.setattr("src.live.monitoring.process_alive", lambda pid: False)
     instances, _ = discover_instances(tmp_path)
     assert instances["one"].metadata()["runtime_state"] == "unknown"
     assert instances["one"].metadata()["audit_state"] == "unknown"
