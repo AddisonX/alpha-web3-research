@@ -9,6 +9,7 @@ import polars as pl
 from alpha_web3_research.config import Settings
 from alpha_web3_research.data.storage import ParquetOHLCVStore
 from alpha_web3_research.universe.builder import UniverseBuilder
+from alpha_web3_research.factors.turnover import build_turnover_factors
 
 FACTOR_ID_COLUMNS = ["exchange", "market_type", "symbol", "timeframe", "timestamp"]
 GROUP_COLUMNS = ["exchange", "market_type", "symbol", "timeframe"]
@@ -105,7 +106,7 @@ class FactorBuilder:
         if not factor_columns:
             return self._empty_long_frame()
 
-        return (
+        legacy = (
             wide.select(FACTOR_ID_COLUMNS + factor_columns)
             .unpivot(index=FACTOR_ID_COLUMNS, on=factor_columns, variable_name="factor_name", value_name="factor_value")
             .with_columns(
@@ -115,6 +116,16 @@ class FactorBuilder:
             .select(["generated_at", *FACTOR_ID_COLUMNS, "factor_family", "factor_name", "factor_value"])
             .sort(["timeframe", "factor_name", "timestamp", "symbol"])
         )
+        turnover = (
+            build_turnover_factors(data, GROUP_COLUMNS)
+            .unpivot(index=FACTOR_ID_COLUMNS, variable_name="factor_name", value_name="factor_value")
+            .with_columns(
+                pl.lit(generated_at).alias("generated_at"),
+                pl.lit("turnover_proxy").alias("factor_family"),
+            )
+            .select(legacy.columns)
+        )
+        return pl.concat([legacy, turnover]).sort(["timeframe", "factor_name", "timestamp", "symbol"])
 
     @staticmethod
     def _empty_long_frame() -> pl.DataFrame:
@@ -140,6 +151,8 @@ def zscore_expr(column: str, window: int) -> pl.Expr:
 
 
 def factor_family(name: str) -> str:
+    if name.startswith("turnover_"):
+        return "turnover_proxy"
     if name.startswith(("return_", "log_return", "mean_return", "ma_gap", "distance_to")):
         return "momentum_reversal"
     if name.startswith("range_to_quote_volume"):

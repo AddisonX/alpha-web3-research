@@ -1,0 +1,48 @@
+{
+  "effective_date": "2026-11-09",
+  "user_requested_defaults": {
+    "fee_per_traded_notional": 0.0005,
+    "fee_applies_to": "every buy and sell, including opening and closing",
+    "long_short_return_aggregation": "daily net returns compounded",
+    "turnover": "daily actual position changes, including marked position drift and equity changes",
+    "weighting": "Daily equal notional weights within long and short sides, including quantity rebalancing of retained names",
+    "buffer_rule": "Keep long names while in top30%, replace vacancies from top10% in descending score order; short side mirrored. Daily equal weighting; retain names, not unchanged quantities."
+  },
+  "current_strategy_exposure": {
+    "gross_notional_over_equity": 1.0,
+    "long_G10_over_equity": 0.5,
+    "short_G1_over_equity": 0.5
+  },
+  "metrics": {
+    "sharpe": "daily net mean / sample daily standard deviation * sqrt(365), risk-free rate zero",
+    "calmar": "annualized compounded net return / maximum drawdown",
+    "maximum_drawdown": "from daily net equity, including initial equity",
+    "IC": "Default IC means Rank IC (Spearman): cross-sectional Pearson correlation of factor average-tie ranks and forward24h price excess return average-tie ranks; annual average of daily correlations.",
+    "ICIR": "Mean daily Rank IC / sample standard deviation, unannualized unless explicitly requested",
+    "Pearson_IC": "Legacy Pearson statistics must be explicitly labeled Pearson IC, never bare IC."
+  },
+  "excluded_costs": [
+    "slippage",
+    "funding"
+  ],
+  "missing_data": "Never silently replace: disclose estimated days and assumptions in each result",
+  "active_factor_set": {
+    "feature_columns_file": "analysis/active_feature_columns.json",
+    "count": 15,
+    "added_factors": [],
+    "excluded_factors": [
+      "funding_sum_3d",
+      "funding_sum_7d",
+      "funding_mean_1d_minus_7d"
+    ],
+    "instruction": "Use original15 including range_to_quote_volume_2; no funding-rate features."
+  },
+  "current_training": {
+    "window": "Expanding2021 through previous year; annual refit to predict next year",
+    "trees": 120,
+    "max_depth": 4,
+    "eta": 0.05,
+    "seed": 42,
+    "factor_input": "Raw15 factors; target remains next24h fullpool excess return"
+  }
+}
