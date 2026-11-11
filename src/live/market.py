@@ -42,8 +42,8 @@ class MarketDataProvider:
             import pandas as pd
             cap_path = self.settings.resolved_data_path() / "imports/xgb15/caps.parquet"
             caps = pd.read_parquet(cap_path)
-            close_time = pd.Timestamp(decision_timestamp + timeframe_ms, unit="ms", tz="UTC")
-            required_date = (close_time - pd.Timedelta(hours=24)).floor("D").tz_localize(None) - pd.Timedelta(days=1)
+            from src.data.xgb15_caps import required_cap_date
+            required_date = required_cap_date(decision_timestamp)
             if not pd.to_datetime(caps.date).eq(required_date).any():
                 raise MarketDataError(f"market cap source date {required_date.date()} is missing; OHLCV fetch not started", {})
         since_ms = decision_timestamp - (requirements.lookback_bars - 1) * timeframe_ms

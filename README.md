@@ -94,6 +94,8 @@ API后台采集所有实例权益，不依赖页面当前选择。扩展约定�
 让其他Codex或协作者生成兼容策略时，使用[策略导入模板](templates/strategy-import/README.md)，
 并发送其中的[Codex提示词](templates/strategy-import/CODEX_PROMPT.md)。模板未注册，不会启动交易。
 
+已接入的`xgb15-120-long-short-v1`使用独立多空执行器，真实资产准备及缺件检查见[XGB15本机接入](docs/strategies/xgb15-120-long-short-v1/LOCAL_SETUP.md)。
+
 第二策略的历史重放、独立dry-run启动方式和当前网络阻塞，见[兼容性验收](docs/reversal-acceptance.md)。
 
 本地东京同款模型实例位于`freqtrade/instances/tokyo-lightgbm/`，独立目录及运行方式见[本地实例说明](docs/local-instances.md)。

@@ -8,6 +8,7 @@ def default_instance_name(strategy_id: str = DEFAULT_STRATEGY_ID) -> str:
     return {
         DEFAULT_STRATEGY_ID: "tokyo-lightgbm",
         "return-1-reversal-long-only-v1": "return-1-reversal",
+        "xgb15-120-long-short-v1": "xgb15-paper",
     }.get(strategy_id, strategy_id)
 
 

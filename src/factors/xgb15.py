@@ -3,11 +3,11 @@ import numpy as np
 import pandas as pd
 
 from src.strategies.xgb15 import FEATURES, percentile_features
+from src.data.xgb15_caps import required_cap_date
 
 
 def build_xgb15_features(bars: pd.DataFrame, caps: pd.DataFrame, decision_timestamp: int, pairs: list[str] | None = None) -> pd.DataFrame:
-    close_time = pd.Timestamp(decision_timestamp + 14_400_000, unit="ms", tz="UTC")
-    last_date = (close_time - pd.Timedelta(hours=24)).floor("D").tz_localize(None) - pd.Timedelta(days=1)
+    last_date = required_cap_date(decision_timestamp)
     caps = caps.copy()
     caps["date"] = pd.to_datetime(caps.date).dt.tz_localize(None)
     caps = caps.loc[caps.date <= last_date].copy()
