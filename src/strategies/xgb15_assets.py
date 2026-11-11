@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.data.xgb15_caps import BAR_MS, cap_coverage, normalize_caps, read_mapping, required_cap_date
+from src.data.xgb15_caps import BAR_MS, cap_coverage, current_caps_path, normalize_caps, read_mapping, required_cap_date
 from src.live.signals import latest_closed_decision_timestamp
 from src.strategies.xgb15 import STRATEGY_ID, XGB15LongShortStrategy
 
@@ -86,7 +86,7 @@ def check_assets(root: Path, now: datetime | None = None) -> dict:
     inspect("pairs", pool_check)
 
     def caps_check():
-        caps = normalize_caps(pd.read_parquet(private / "caps.parquet"))
+        caps = normalize_caps(pd.read_parquet(current_caps_path(private)))
         if pairs is None:
             raise ValueError("model must validate before cap coverage can be checked")
         coverage = cap_coverage(caps, pairs, stamp)
@@ -97,9 +97,11 @@ def check_assets(root: Path, now: datetime | None = None) -> dict:
 
     inspect("caps", caps_check)
     mapping_ready = False
+    no_token_id_pairs = []
     try:
         if pairs is not None:
-            read_mapping(private / "asset_mapping.json", pairs)
+            mapping = read_mapping(private / "asset_mapping.json", pairs)
+            no_token_id_pairs = [pair for pair, identifiers in mapping.items() if not identifiers]
             mapping_ready = True
     except (OSError, ValueError, KeyError, TypeError):
         pass
@@ -107,7 +109,9 @@ def check_assets(root: Path, now: datetime | None = None) -> dict:
             "signal_time": signal_time.isoformat(), "model_year": year, "decision_timestamp": stamp,
             "required_cap_date": str(required_cap_date(stamp).date()),
             "ready": all(check["status"] == "ok" for check in checks), "checks": checks,
-            "cap_refresh_mapping_ready": mapping_ready, "automatic_refresh_scheduled": False,
+            "cap_refresh_mapping_ready": mapping_ready, "no_token_market_cap_id_pairs": no_token_id_pairs,
+            "cap_input": "live" if current_caps_path(private).parent.name == "runtime" else "published_snapshot",
+            "automatic_refresh_scheduled": False,
             "live_execution_verified": False,
             "acceptance_note": "Private prediction/target parity and fresh OHLCV still require independent verification."}
 

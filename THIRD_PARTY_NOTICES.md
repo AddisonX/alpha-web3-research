@@ -23,6 +23,8 @@ See the GNU project's [compatibility explanation](https://www.gnu.org/licenses/g
 
 Dependencies are declared in `pyproject.toml`, `uv.lock`, `dashboard/package.json`
 and `dashboard/package-lock.json`. Consult each package's license before redistribution.
-Historical exchange data, model weights, trading databases and private deployment
-artifacts are not distributed. Fetch data under its provider's applicable terms.
+The explicitly published XGB15 bundle includes selected weights and historical
+acceptance inputs. Other private datasets, weights, trading databases and deployment
+artifacts remain excluded. Provider data remains subject to its applicable terms;
+the project license does not relicense third-party data.
 Synthetic test fixtures are not historical performance claims.

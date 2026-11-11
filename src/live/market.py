@@ -40,7 +40,8 @@ class MarketDataProvider:
         caps = None
         if requirements.features == FEATURES:
             import pandas as pd
-            cap_path = self.settings.resolved_data_path() / "imports/xgb15/caps.parquet"
+            from src.data.xgb15_caps import current_caps_path
+            cap_path = current_caps_path(self.settings.resolved_data_path() / "imports/xgb15")
             caps = pd.read_parquet(cap_path)
             from src.data.xgb15_caps import required_cap_date
             required_date = required_cap_date(decision_timestamp)

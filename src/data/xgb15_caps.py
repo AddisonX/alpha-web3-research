@@ -17,6 +17,11 @@ CAP_COLUMNS = ["symbol", "date", "cmc_id", "market_cap_usd", "marketcap_identity
 BAR_MS = 14_400_000
 
 
+def current_caps_path(folder: Path) -> Path:
+    live = folder / "runtime/caps.parquet"
+    return live if live.exists() else folder / "caps.parquet"
+
+
 def required_cap_date(decision_timestamp: int) -> pd.Timestamp:
     close = pd.Timestamp(decision_timestamp + BAR_MS, unit="ms", tz="UTC")
     return (close - pd.Timedelta(hours=24)).floor("D").tz_localize(None) - pd.Timedelta(days=1)
@@ -70,8 +75,13 @@ def read_mapping(path: Path, pairs: list[str]) -> dict[str, list[int]]:
         if pair not in pairs:
             continue
         ids = record.get("cmc_ids")
-        if pair in result or not isinstance(ids, list) or not ids:
+        if pair in result or not isinstance(ids, list):
             raise ValueError("missing or duplicate CMC mapping")
+        if not ids:
+            if record.get("instrument_type") != "index":
+                raise ValueError("token contract requires a CMC ID")
+            result[pair] = []
+            continue
         if any(type(identifier) is not int or identifier <= 0 for identifier in ids) or len(set(ids)) != len(ids):
             raise ValueError("CMC IDs must be ordered unique positive integers")
         result[pair] = ids
@@ -161,10 +171,10 @@ def refresh_caps(folder: Path, pairs: list[str], stamp: int, now: datetime, fetc
     if not rows:
         raise ValueError("CMC returned no observations; previous caps preserved")
     fresh = normalize_caps(pd.DataFrame(rows))
-    path = folder / "caps.parquet"
-    if path.exists():
+    source_path = current_caps_path(folder)
+    if source_path.exists():
         # Freeze previously observed history; do not silently rewrite it with revisions.
-        old = normalize_caps(pd.read_parquet(path))
+        old = normalize_caps(pd.read_parquet(source_path))
         fresh = normalize_caps(pd.concat([old, fresh], ignore_index=True).drop_duplicates(["symbol", "date"], keep="first"))
-    atomic_caps(path, fresh)
+    atomic_caps(folder / "runtime/caps.parquet", fresh)
     return cap_coverage(fresh, pairs, stamp)

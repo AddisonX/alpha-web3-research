@@ -7,6 +7,11 @@
 本次补充研究资产导出/导入、离线缺件检查和显式市值刷新命令，默认实例名为`xgb15-paper`。
 没有将research的全部训练实验合并到dev，没有重新训练、启动新worker或部署服务器。
 
+更新：已同步PR #1提交`3d4465f`，该提交带有指定年度权重及复现输入。
+现在无需再找对方导出这些已有文件，也不要对已有目录重复执行import。
+先运行`python -m scripts.verify_xgb15_bundle`复现历史，再执行check检查当前时效。
+本机实际验收及实时阻塞项见[2026-11-11验收报告](READINESS_20261111.md)。
+
 | research来源（6f7b0c7） | dev中的对应部分 |
 |---|---|
 | `analysis/gpu_xgb15_expanding_120_lr005.py` | 原120树年度训练产物的导出适配，不在dev重新训练 |
@@ -33,6 +38,7 @@ uv run --no-sync python -m scripts.xgb15_assets check
 2026-11-11本机初次检查：缺运行manifest、真实模型、年度pairs、市值历史和CMC映射。
 本轮决策bar为2026-11-10 12:00 UTC，按现有公式使用截至11月8日的市值，最长窗口为40天。
 后续以命令实时计算的日期为准，不能把这段初次记录视为永久运行状态。
+初次缺件记录已被本次PR同步解决；当前阻塞项为市值快照过期，而不是模型缺失。
 
 ## 2. 从实际research产物导出
 
@@ -105,10 +111,13 @@ uv run --no-sync python -m scripts.xgb15_assets check
 
 需要原research的`asset_mapping.json`，记录格式为`[{"contract":"BTC/USDT:USDT","cmc_ids":[1]}, ...]`。
 映射必须覆盖完整年度池；版本顺序沿用研究定义，不用ticker猜测CMC ID，也不把1000倍合约的市值再乘1000。
+对明确标记为`instrument_type: index`的BTCDOM等指数允许空ID列表，保留其市值缺失；普通代币不允许空ID。
 采集沿用research里的CMC公开历史响应接口，只读取已完成日，不用现时市值倒填历史。
 接口访问、服务条款和响应稳定性需在实际运行环境确认；本次只做了模拟响应测试，没有完成真实CMC联网验收。
 遇到401/403等拒绝访问直接失败，不换入口绕过；任意请求失败时保留原caps.parquet。
 保存原始响应、获取时间及摘要；已有历史观察不被后续版本静默覆盖，不插值或前后填充。
+发布的`data/imports/xgb15/caps.parquet`保持不变，以保留历史复现摘要。
+刷新结果写到`data/imports/xgb15/runtime/caps.parquet`；实时行情与check优先读取该文件，历史验收仍使用发布快照。
 缺失身份误差值沿用原研究处理，不伪造为0；它不代表已完成价格×供给的一致性验证。
 如需修正已有观察或更换数据源，先做单独审核，不能直接覆盖后声称与旧研究严格一致。
 

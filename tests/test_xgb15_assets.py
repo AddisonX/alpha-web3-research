@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import xgboost as xgb
 
-from src.data.xgb15_caps import cap_coverage, normalize_caps, parse_history, refresh_caps, required_cap_date
+from src.data.xgb15_caps import cap_coverage, current_caps_path, normalize_caps, parse_history, read_mapping, refresh_caps, required_cap_date
 from src.live.paths import default_instance_name
 from src.strategies.registry import create_strategy
 from src.strategies.xgb15 import FEATURES, STRATEGY_ID
@@ -148,9 +148,11 @@ def test_refresh_uses_explicit_ids_and_preserves_old_observations(tmp_path):
     result = refresh_caps(private, PAIRS, STAMP, NOW, fetch)
     assert len(urls) == 1 and "id=1&" in urls[0]
     assert result["complete_count"] == 60
-    actual = pd.read_parquet(private / "caps.parquet")
+    actual = pd.read_parquet(current_caps_path(private))
     assert actual.loc[(actual.symbol == PAIRS[-1]) & (actual.date == start), "market_cap_usd"].iloc[0] == 159.
     assert actual.date.max() == end
+    pd.testing.assert_frame_equal(pd.read_parquet(private / "caps.parquet"), old)
+    assert current_caps_path(private) == private / "runtime/caps.parquet"
 
 
 def test_access_denial_leaves_previous_parquet_unchanged(tmp_path):
@@ -177,6 +179,15 @@ def test_parse_rejects_provider_errors_and_incomplete_days():
     data["data"]["quotes"][0]["timeClose"] = "2026-11-08T12:00:00Z"
     with pytest.raises(ValueError, match="completed daily"):
         parse_history(data, 1, day, day)
+
+
+def test_index_mapping_has_no_fabricated_token_id(tmp_path):
+    path = tmp_path / "mapping.json"
+    path.write_text(json.dumps([{"contract": "BTCDOM/USDT:USDT", "cmc_ids": [], "instrument_type": "index"}]))
+    assert read_mapping(path, ["BTCDOM/USDT:USDT"]) == {"BTCDOM/USDT:USDT": []}
+    path.write_text(json.dumps([{"contract": "BTC/USDT:USDT", "cmc_ids": [], "instrument_type": "token"}]))
+    with pytest.raises(ValueError, match="requires a CMC ID"):
+        read_mapping(path, ["BTC/USDT:USDT"])
 
 
 def test_completed_day_millisecond_precision_is_supported():
