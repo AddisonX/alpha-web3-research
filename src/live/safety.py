@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
+import polars as pl
+from src.strategies.base import validate_signed_weights
 
 
 @dataclass(frozen=True)
@@ -15,9 +17,11 @@ class LiveSignalHealth:
     valid_until: int | None = None
     selected_pairs: frozenset[str] = frozenset()
     cross_section_count: int | None = None
+    allow_short: bool = False
+    short_pairs: frozenset[str] = frozenset()
 
 
-def check_live_signal_status(status: dict[str, Any], now: datetime) -> LiveSignalHealth:
+def check_live_signal_status(status: dict[str, Any], now: datetime, *, allow_short: bool = False) -> LiveSignalHealth:
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     if status.get("state") != "healthy":
@@ -38,16 +42,28 @@ def check_live_signal_status(status: dict[str, Any], now: datetime) -> LiveSigna
     if any(not isinstance(pair, str) or not pair for pair in selected):
         return LiveSignalHealth(False, "signal status has invalid pairs")
     pairs = frozenset(selected)
+    shorts = status.get("short_pairs", [])
+    signed = status.get("allow_short", False) is True
+    if signed and not allow_short:
+        return LiveSignalHealth(False, "short execution is not enabled")
+    if not isinstance(shorts, list) or any(not isinstance(p, str) for p in shorts):
+        return LiveSignalHealth(False, "invalid short targets")
+    if len(set(shorts)) != len(shorts) or not set(shorts).issubset(pairs):
+        return LiveSignalHealth(False, "invalid short targets")
+    if (shorts and not signed) or (signed and (not shorts or len(shorts) == len(pairs))):
+        return LiveSignalHealth(False, "invalid short allocation")
     if len(pairs) != selected_count or selected_count < 1 or cross_section_count < 60:
         return LiveSignalHealth(False, "signal universe or selection count is invalid")
 
     now_ms = int(now.astimezone(timezone.utc).timestamp() * 1000)
     generated_ms = int(generated_at.timestamp() * 1000)
+    if signed and generated_ms < decision + 4 * 3_600_000:
+        return LiveSignalHealth(False, "decision candle has not closed")
     if decision > generated_ms or generated_ms > now_ms:
         return LiveSignalHealth(False, "signal generation time is invalid")
     if now_ms >= valid_until or decision >= valid_until:
         return LiveSignalHealth(False, "signal has expired")
-    return LiveSignalHealth(True, "healthy", decision, valid_until, pairs, cross_section_count)
+    return LiveSignalHealth(True, "healthy", decision, valid_until, pairs, cross_section_count, signed, frozenset(shorts))
 
 
 def validate_signal_rows(signals: pd.DataFrame, health: LiveSignalHealth) -> str | None:
@@ -70,11 +86,18 @@ def validate_signal_rows(signals: pd.DataFrame, health: LiveSignalHealth) -> str
         return "decision rows are not valid"
     if not current["signal_valid_until"].eq(health.valid_until).all():
         return "signal file and status have different expiry times"
-    if not current["target_position"].isin([0, 1]).all():
+    if not current["target_position"].isin([-1, 0, 1] if health.allow_short else [0, 1]).all():
         return "live signal file contains non-long targets"
     decision_pairs = frozenset(current.loc[current["date"] == decision_date, "pair"])
     for _, rows in current.groupby("date"):
-        selected = frozenset(rows.loc[rows["target_position"] == 1, "pair"])
+        selected = frozenset(rows.loc[rows["target_position"] != 0, "pair"])
+        if health.allow_short:
+            try:
+                validate_signed_weights(pl.from_pandas(rows))
+            except (ValueError, TypeError):
+                return "invalid signed target weights"
+            if frozenset(rows.loc[rows.target_position == -1, "pair"]) != health.short_pairs:
+                return "short targets differ from status"
         if frozenset(rows["pair"]) != decision_pairs or selected != health.selected_pairs:
             return "signal file and status have different decisions or targets"
     return None

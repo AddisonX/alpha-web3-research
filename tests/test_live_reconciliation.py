@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,7 +50,7 @@ def audit_files(tmp_path: Path) -> dict:
         ),
         encoding="utf-8",
     )
-    with sqlite3.connect(database_path) as connection:
+    with closing(sqlite3.connect(database_path)) as connection, connection:
         connection.execute(
             "CREATE TABLE trades (pair TEXT, is_open INTEGER, is_short INTEGER, close_date TEXT)"
         )
@@ -80,7 +81,7 @@ def _codes(report: dict) -> set[str]:
 
 def test_healthy_and_rebalance_grace(audit_files: dict) -> None:
     assert _audit(audit_files)["state"] == "healthy"
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("DELETE FROM trades")
         connection.execute(
             "INSERT INTO trades VALUES ('OLD/USDT:USDT', 1, 0, NULL)"
@@ -91,7 +92,7 @@ def test_healthy_and_rebalance_grace(audit_files: dict) -> None:
 
 
 def test_missing_targets_warn_but_do_not_block_recovery(audit_files: dict) -> None:
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("DELETE FROM trades WHERE pair = ?", (audit_files["selected"][0],))
     report = _audit(audit_files)
     assert report["state"] == "degraded"
@@ -101,7 +102,7 @@ def test_missing_targets_warn_but_do_not_block_recovery(audit_files: dict) -> No
 
 def test_recently_closed_target_does_not_count_as_missing(audit_files: dict) -> None:
     pair = audit_files["selected"][0]
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("DELETE FROM trades WHERE pair = ?", (pair,))
         connection.execute(
             "INSERT INTO trades VALUES (?, 0, 0, '2026-07-27 06:00:00')", (pair,)
@@ -112,7 +113,7 @@ def test_recently_closed_target_does_not_count_as_missing(audit_files: dict) -> 
 
 
 def test_unexpected_short_duplicate_or_stale_order_blocks(audit_files: dict) -> None:
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("INSERT INTO trades VALUES ('OLD/USDT:USDT', 1, 0, NULL)")
         connection.execute(
             "INSERT INTO trades VALUES (?, 1, 1, NULL)", (audit_files["selected"][0],)
@@ -133,7 +134,7 @@ def test_unexpected_short_duplicate_or_stale_order_blocks(audit_files: dict) -> 
 
 
 def test_future_dated_open_order_blocks(audit_files: dict) -> None:
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute(
             "INSERT INTO orders VALUES (1, ?, 'buy', '2026-07-27 12:10:00', 1)",
             (audit_files["selected"][0],),
@@ -178,14 +179,14 @@ def test_alerts_on_change_and_recovery_and_retries_failed_delivery(
     publish_audit(healthy, report_path, "https://example.invalid/alert", sender)
     assert calls == []
 
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("INSERT INTO trades VALUES ('OLD/USDT:USDT', 1, 0, NULL)")
     blocked = _audit(audit_files)
     publish_audit(blocked, report_path, "https://example.invalid/alert", sender)
     publish_audit(blocked, report_path, "https://example.invalid/alert", sender)
     assert calls == ["blocked"]
 
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("DELETE FROM trades WHERE pair = 'OLD/USDT:USDT'")
     publish_audit(_audit(audit_files), report_path, "https://example.invalid/alert", sender)
     assert calls == ["blocked", "healthy"]
@@ -224,14 +225,14 @@ def test_audit_cli_writes_report_and_uses_blocking_exit_code(
     assert runner.invoke(app, args).exit_code == 0
     assert json.loads(report_path.read_text(encoding="utf-8"))["entry_allowed"]
 
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute("INSERT INTO trades VALUES ('OLD/USDT:USDT', 1, 0, NULL)")
     assert runner.invoke(app, args).exit_code == 2
     assert not json.loads(report_path.read_text(encoding="utf-8"))["entry_allowed"]
 
 
 def test_rehearsal_uses_copies_and_passes_all_faults(audit_files: dict, tmp_path: Path) -> None:
-    with sqlite3.connect(audit_files["database_path"]) as connection:
+    with closing(sqlite3.connect(audit_files["database_path"])) as connection, connection:
         connection.execute(
             "INSERT INTO orders VALUES (1, ?, 'buy', '2026-07-27 04:10:00', 0)",
             (audit_files["selected"][0],),

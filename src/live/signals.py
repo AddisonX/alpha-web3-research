@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import ccxt
+import polars as pl
 
 from src.config import Settings
 from src.live.paths import instance_directory
@@ -71,6 +72,7 @@ class LiveLongOnlySignalProducer:
             if not isinstance(metadata, StrategyMetadata):
                 raise ValueError("strategy must provide StrategyMetadata")
             requirements = strategy.requirements
+            allow_short = getattr(strategy, "allow_short", False) is True
             if requirements.timeframe != "4h":
                 raise ValueError("the current Freqtrade adapter supports only 4h signals")
             if self.lookback_bars is not None:
@@ -78,7 +80,7 @@ class LiveLongOnlySignalProducer:
             timeframe_ms = int(self.exchange.parse_timeframe(requirements.timeframe) * 1000)
             decision_timestamp = latest_closed_decision_timestamp(
                 int(now_ms if now_ms is not None else self.exchange.milliseconds()),
-                timeframe_ms, self.rebalance_interval_hours, self.rebalance_hour_utc,
+                timeframe_ms, self.rebalance_interval_hours, getattr(strategy, "rebalance_hour_utc", self.rebalance_hour_utc),
             )
             if (not force and previous.get("state") == "healthy"
                     and int(previous.get("decision_timestamp", -1)) == decision_timestamp
@@ -87,11 +89,22 @@ class LiveLongOnlySignalProducer:
                                         int(previous["cross_section_count"]), int(previous["selected_count"]),
                                         list(previous["selected_pairs"]), True)
             pairs = self._read_pairs()
+            if allow_short and hasattr(strategy, "manifest"):
+                from datetime import datetime, timezone, timedelta
+                year = datetime.fromtimestamp((decision_timestamp + timeframe_ms) / 1000, timezone(timedelta(hours=8))).year
+                if set(pairs) != set(strategy.manifest["models"][str(year)]["pairs"]):
+                    raise ValueError("pair configuration must match the fixed annual model pool")
             market = self.data_provider.prepare(pairs, decision_timestamp, requirements)
             errors = market.errors
             if market.features.height < self.min_cross_section_count:
                 raise RuntimeError(f"cross section {market.features.height} < minimum {self.min_cross_section_count}")
-            context = StrategyContext(decision_timestamp, market.features)
+            previous_targets = None
+            if allow_short and self.signal_path.exists() and previous.get("state") != "offline_verified":
+                history = pl.read_parquet(self.signal_path)
+                earlier = history.filter(pl.col("decision_timestamp") < decision_timestamp)
+                if earlier.height:
+                    previous_targets = earlier.filter(pl.col("decision_timestamp") == earlier["decision_timestamp"].max()).unique("pair").select("pair", "target_position")
+            context = StrategyContext(decision_timestamp, market.features, allow_short, previous_targets)
             decision = strategy.decide(context)
             decision.validate(context)
             selected = self.store.publish(

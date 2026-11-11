@@ -79,7 +79,7 @@ def audit_dry_run(
         status = json.loads(status_path.read_text(encoding="utf-8"))
         if not isinstance(status, dict):
             raise ValueError("status must be a JSON object")
-        health = check_live_signal_status(status, now)
+        health = check_live_signal_status(status, now, allow_short=status.get("strategy_id") == "xgb15-120-long-short-v1")
         if not health.ready:
             issues.append(_issue("signal_unhealthy", "block"))
     except (OSError, ValueError, TypeError) as exc:
@@ -88,7 +88,7 @@ def audit_dry_run(
 
     if health is not None and health.ready:
         try:
-            signals = pd.read_parquet(signal_path, columns=SIGNAL_COLUMNS)
+            signals = pd.read_parquet(signal_path, columns=SIGNAL_COLUMNS + (["target_weight"] if health.allow_short else []))
             signals["date"] = pd.to_datetime(signals["date"], utc=True)
             error = validate_signal_rows(signals, health)
             if error is not None:
@@ -123,7 +123,7 @@ def audit_dry_run(
         short_pairs = [pair for pair, is_short in open_trades if is_short]
         if duplicate_pairs:
             issues.append(_issue("duplicate_open_trades", "block", duplicate_pairs))
-        if short_pairs:
+        if short_pairs and not (health and health.ready and health.allow_short):
             issues.append(_issue("unexpected_short_trades", "block", short_pairs))
 
         for order in database["open_orders"]:
@@ -154,8 +154,12 @@ def audit_dry_run(
             exempt_pairs = database["recently_closed_pairs"] & target_pairs
             missing_pairs = target_pairs - open_pairs - exempt_pairs
             unexpected_pairs = open_pairs - target_pairs
+            wrong_side = {pair for pair, short in open_trades if pair in target_pairs
+                          and short != (pair in health.short_pairs)}
             generated_at = datetime.fromisoformat(str(status["generated_at"]))
             grace_elapsed = now >= generated_at + timedelta(minutes=grace_minutes)
+            if grace_elapsed and wrong_side:
+                issues.append(_issue("wrong_position_direction", "block", list(wrong_side)))
             if grace_elapsed and unexpected_pairs:
                 issues.append(_issue("unexpected_open_positions", "block", list(unexpected_pairs)))
             if grace_elapsed and missing_pairs:

@@ -1,5 +1,29 @@
 import { expect, test } from "@playwright/test";
 
+test("shows signed historical targets without fabricating live balances", async ({ page }) => {
+  await page.route(/\/api\/instances(?:\?.*)?$/, route => route.fulfill({json: {
+    scope: "local", default_instance: "xgb15-paper", errors: [], instances: [{id: "xgb15-paper", display_name: "xgb15-paper", database_ready: false, runtime_state: "stopped"}],
+  }}));
+  await page.route("**/api/instances/xgb15-paper/targets", route => route.fulfill({json: {
+    instance_id: "xgb15-paper", strategy_id: "xgb15-120-long-short-v1", allow_short: true, state: "offline_verified", decision_time: "2026-10-26T12:00:00Z",
+    targets: [{pair: "A/USDT:USDT", side: "long", weight: .5, score: .02}, {pair: "B/USDT:USDT", side: "short", weight: -.5, score: -.02}],
+  }}));
+  await page.goto("/?instance=xgb15-paper");
+  await expect(page.getByRole("heading", {name: "xgb15-paper", exact: true})).toBeVisible();
+  await expect(page.getByText("历史导入验收通过。", {exact: false})).toBeVisible();
+  await expect(page.getByRole("cell", {name: "空头", exact: true})).toBeVisible();
+  await expect(page.getByRole("cell", {name: "多头", exact: true})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "实时权益曲线"})).toHaveCount(0);
+});
+
+test("renders a short position as short", async ({ page }) => {
+  await page.route("**/api/instances/tokyo-lightgbm/live?*", route => route.fulfill({json: {
+    ...liveSnapshot, positions: [{...liveSnapshot.positions[0], side: "short"}],
+  }}));
+  await page.goto("/");
+  await expect(page.getByText("Short / 空头", {exact: false})).toBeVisible();
+});
+
 const liveSnapshot = {
   instance: {
     id: "tokyo-lightgbm", display_name: "tokyo-lightgbm", strategy_id: "tokyo-lightgbm-long-only-v1",

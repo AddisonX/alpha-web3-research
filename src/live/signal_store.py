@@ -11,7 +11,7 @@ from src.strategies.base import StrategyDecision, StrategyMetadata, DataRequirem
 HOUR_MS = 3_600_000
 
 class SignalStore:
-    """Translate complete binary targets into the existing Freqtrade file contract."""
+    """Publish binary targets or explicitly enabled signed allocation targets."""
 
     def __init__(self, signal_path: Path, status_path: Path) -> None:
         self.signal_path = signal_path
@@ -44,11 +44,13 @@ class SignalStore:
         timeline = build_signal_timeline(ranked, stamp, generated_at, timeframe_ms,
                                          rebalance_interval_hours, metadata.source_experiment)
         _atomic_write_parquet(self.signal_path, self._merge_history(timeline))
-        selected = ranked.filter(pl.col("target_position") == 1).sort("score_position")["pair"].to_list()
+        selected = ranked.filter(pl.col("target_position") != 0).sort("score_position")["pair"].to_list()
         next_rebalance = stamp + rebalance_interval_hours * HOUR_MS
         valid_until = next_rebalance + timeframe_ms
         _atomic_write_json(self.status_path, {
             "state": "healthy", "strategy_id": strategy_id, "generated_at": generated_at,
+            "allow_short": decision.allow_short,
+            "short_pairs": ranked.filter(pl.col("target_position") == -1)["pair"].to_list(),
             "market_data_source": market_data_source,
             "decision_timestamp": stamp, "decision_time": _iso_timestamp(stamp),
             "next_rebalance_timestamp": next_rebalance, "next_rebalance_time": _iso_timestamp(next_rebalance),
@@ -73,7 +75,7 @@ class SignalStore:
             frame = frame.with_columns(pl.lit(None, dtype=pl.Float64).alias("model_score_rank_pct"))
         return frame.with_columns(
             pl.lit(frame.height).alias("cross_section_count"),
-            pl.lit(frame.filter(pl.col("target_position") == 1).height).alias("selected_count"),
+            pl.lit(frame.filter(pl.col("target_position") != 0).height).alias("selected_count"),
         )
 
     def _merge_history(self, current: pl.DataFrame) -> pl.DataFrame:
@@ -119,6 +121,7 @@ def build_signal_timeline(
             "signal_valid",
             "is_rebalance",
             "target_position",
+            *(["target_weight"] if "target_weight" in ranked.columns else []),
             "model_score",
             "model_score_rank_pct",
             "score_position",

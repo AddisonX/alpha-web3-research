@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager, suppress, closing
 from functools import partial
 from pathlib import Path
 from typing import Callable
@@ -144,6 +144,9 @@ class LiveDashboardProvider:
                     "cross_section_count": signal_status.get("cross_section_count"),
                     "selected_count": signal_status.get("selected_count"),
                     "selected_pairs": signal_status.get("selected_pairs", []),
+                    "short_pairs": signal_status.get("short_pairs", []),
+                    "allow_short": signal_status.get("allow_short", False),
+                    "reason": signal_status.get("reason"),
                     "fetch_error_count": signal_status.get("fetch_error_count"),
                 },
                 "positions": positions,
@@ -170,9 +173,9 @@ class LiveDashboardProvider:
             FROM trades
             ORDER BY id
         """
-        with sqlite3.connect(
+        with closing(sqlite3.connect(
             f"file:{self.database_path}?mode=ro", uri=True, timeout=5
-        ) as connection:
+        )) as connection:
             connection.row_factory = sqlite3.Row
             return [dict(row) for row in connection.execute(query)]
 
@@ -186,9 +189,9 @@ class LiveDashboardProvider:
             ORDER BY id DESC
             LIMIT 30
         """
-        with sqlite3.connect(
+        with closing(sqlite3.connect(
             f"file:{self.database_path}?mode=ro", uri=True, timeout=5
-        ) as connection:
+        )) as connection:
             connection.row_factory = sqlite3.Row
             return [
                 {
@@ -257,7 +260,7 @@ class LiveDashboardProvider:
             "unrealized_pnl": unrealized_pnl,
             "return_pct": total_pnl / self.starting_balance * 100.0,
         }
-        with sqlite3.connect(self.history_database_path, timeout=5) as connection:
+        with closing(sqlite3.connect(self.history_database_path, timeout=5)) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO equity_history (
@@ -290,7 +293,7 @@ class LiveDashboardProvider:
         if self._history_cache is not None:
             return self._history_cache
         self._ensure_history_database()
-        with sqlite3.connect(self.history_database_path, timeout=5) as connection:
+        with closing(sqlite3.connect(self.history_database_path, timeout=5)) as connection, connection:
             connection.row_factory = sqlite3.Row
             self._history_cache = [
                 dict(row)
@@ -309,7 +312,7 @@ class LiveDashboardProvider:
         if self._history_ready:
             return
         self.history_database_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.history_database_path, timeout=5) as connection:
+        with closing(sqlite3.connect(self.history_database_path, timeout=5)) as connection, connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS equity_history (
@@ -373,6 +376,9 @@ def position_snapshot(
         / (open_rate * (1.0 + fee_open))
         - 1.0
     ) * leverage
+    if trade["is_short"]:
+        profit_ratio = ((open_rate * (1.0 - fee_open) - current_rate * (1.0 + fee_close))
+                        / open_rate) * leverage
     pnl_abs = float(trade["stake_amount"]) * profit_ratio
     open_date = _parse_database_datetime(trade["open_date"])
     return {
@@ -578,6 +584,8 @@ class InstanceMonitor:
 
     def sample_all(self) -> None:
         for instance in self.catalog()["instances"]:
+            if not instance["database_ready"]:
+                continue
             try:
                 self.snapshot(instance["id"])
             except Exception:
@@ -638,6 +646,51 @@ def create_app(
             return monitor.snapshot(instance_id)
         except (sqlite3.Error, OSError, pl.exceptions.PolarsError) as error:
             raise HTTPException(status_code=503, detail="instance snapshot unavailable") from error
+
+    @app.get("/api/instances/{instance_id}/targets")
+    def target_preview(instance_id: str, response: Response) -> dict:
+        """Read-only target preview. Never represents fills, balances, or current prices."""
+        response.headers["Cache-Control"] = "no-store"
+        instances, _ = discover_instances(monitor.root)
+        instance = instances.get(instance_id)
+        if instance is None:
+            raise HTTPException(status_code=404, detail="unknown instance")
+        folder = instance.directory / "signals"
+        status = LiveDashboardProvider._read_json(folder / "alpha_live_long_only_status.json")
+        runtime = LiveDashboardProvider._read_json(instance.directory / "runtime/runtime_status.json")
+        if not isinstance(status, dict):
+            raise HTTPException(status_code=503, detail="invalid signal status")
+        targets = []
+        path = folder / "alpha_live_long_only_signals.parquet"
+        if path.exists() and status.get("decision_timestamp") is not None:
+            frame = pl.read_parquet(path).filter((pl.col("decision_timestamp") == status["decision_timestamp"]) & pl.col("is_rebalance") & (pl.col("target_position") != 0))
+            for row in frame.sort("score_position").iter_rows(named=True):
+                targets.append({"pair": row["pair"], "side": "short" if row["target_position"] < 0 else "long",
+                                "weight": row.get("target_weight"), "score": row.get("model_score")})
+        return {"instance_id": instance_id, "state": status.get("state", "unknown"),
+                "allow_short": status.get("allow_short", False),
+                "strategy_id": instance.strategy_id,
+                "last_start_state": runtime.get("state") if isinstance(runtime, dict) else None,
+                "last_start_reason": runtime.get("reason") if isinstance(runtime, dict) else None,
+                "decision_time": status.get("decision_time"), "reason": status.get("reason"),
+                "targets": targets, "kind": "target_preview"}
+
+    @app.get("/api/instances/{instance_id}/backtest")
+    def historical_backtest(instance_id: str, response: Response) -> dict:
+        instances, _ = discover_instances(monitor.root)
+        instance = instances.get(instance_id)
+        if instance is None:
+            raise HTTPException(status_code=404, detail="unknown instance")
+        if instance.strategy_id != "xgb15-120-long-short-v1":
+            raise HTTPException(status_code=404, detail="no imported backtest")
+        path = monitor.root / "data/imports/xgb15/history_2026.json"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="historical backtest unavailable")
+        result = LiveDashboardProvider._read_json(path)
+        if not isinstance(result, dict) or result.get("kind") != "historical_backtest" or result.get("strategy_id") != instance.strategy_id:
+            raise HTTPException(status_code=503, detail="invalid historical backtest")
+        response.headers["Cache-Control"] = "no-store"
+        return result
 
     @app.get("/api/live/equity")
     def equity_default(response: Response, range: str = "all", interval: str = "auto") -> dict:

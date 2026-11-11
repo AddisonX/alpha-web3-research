@@ -482,6 +482,8 @@ button:disabled {
   border-bottom: 0;
 }
 
+.target-preview-table { min-width: 420px; }
+
 .live-table tbody tr:hover {
   background: #fafcfb;
 }

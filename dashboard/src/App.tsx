@@ -170,10 +170,11 @@ function LiveView({ data }: { data: LiveDashboardData }) {
             />
           </div>
           <div className="selected-pairs">
+            {data.signal.state === "offline_verified" && <p role="status">历史导入验收通过 · 未启动模拟交易 · 等待最新行情及市值数据</p>}
             <span>本轮入选 {data.signal.selected_count ?? 0}</span>
             <div>
               {data.signal.selected_pairs.map((pair) => (
-                <code key={pair}>{shortPair(pair)}</code>
+                <code key={pair}>{data.signal.allow_short ? ((data.signal.short_pairs ?? []).includes(pair) ? "空 " : "多 ") : ""}{shortPair(pair)}</code>
               ))}
             </div>
           </div>
@@ -183,7 +184,7 @@ function LiveView({ data }: { data: LiveDashboardData }) {
       <section className="panel">
         <PanelHeader
           title="当前持仓"
-          subtitle={`${data.summary.open_positions} 个 Long · 按未实现盈亏排序`}
+          subtitle={`${data.summary.open_positions} 个持仓 · 按未实现盈亏排序`}
           action={
             <span className="table-total-pnl" style={{ color: valueColor(data.summary.unrealized_pnl) }}>
               {formatMoney(data.summary.unrealized_pnl, "USDT", true)}
@@ -211,7 +212,7 @@ function LiveView({ data }: { data: LiveDashboardData }) {
                   <tr key={position.id}>
                     <td>
                       <strong>{shortPair(position.pair)}</strong>
-                      <small>Long · {formatNumber(position.leverage)}x</small>
+                      <small>{position.side === "short" ? "Short / 空头" : "Long / 多头"} · {formatNumber(position.leverage)}x</small>
                     </td>
                     <td>
                       <strong>#{position.score_position ?? "—"}</strong>
@@ -737,6 +738,52 @@ function EmptyChart({ label }: { label: string }) {
   );
 }
 
+interface Backtest2026 {
+  kind: string;
+  start_date: string;
+  end_date: string;
+  metrics: { net_compound_return: number; max_drawdown: number; sharpe: number; calmar: number };
+  points: Array<{ date: string; equity: number; drawdown_pct: number }>;
+}
+
+function HistoricalBacktest({instanceId}: {instanceId: string}) {
+  const [result, setResult] = useState<Backtest2026 | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setResult(null); setError("");
+    fetch(`/api/instances/${encodeURIComponent(instanceId)}/backtest`, {signal: controller.signal})
+      .then(async response => {
+        if (!response.ok) throw new Error(`历史回放 HTTP ${response.status}`);
+        const next = await response.json() as Backtest2026;
+        if (next.kind !== "historical_backtest") throw new Error("历史数据类型不匹配");
+        if (!controller.signal.aborted) setResult(next);
+      }).catch(caught => { if (!controller.signal.aborted) setError(String(caught)); });
+    return () => controller.abort();
+  }, [instanceId]);
+  return <div className="page live-page"><section className="panel" data-testid="historical-backtest">
+    <PanelHeader title="2026年历史回放曲线" subtitle={result ? `${result.start_date} 至 ${result.end_date} · 扣费复利 · 历史回测，不是实时成交记录` : "加载历史回放"} />
+    {error ? <div className="inline-alert">{error}</div> : result ? <>
+      <div className="signal-facts">
+        <DiagnosticRow label="累计收益" value={formatPct(result.metrics.net_compound_return*100, true)} />
+        <DiagnosticRow label="最大回撤" value={formatPct(result.metrics.max_drawdown*100)} />
+        <DiagnosticRow label="Sharpe / Calmar" value={`${result.metrics.sharpe.toFixed(2)} / ${result.metrics.calmar.toFixed(2)}`} />
+      </div>
+      <div className="live-equity-chart"><ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={result.points} margin={{top:20, right:24, bottom:8, left:8}}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="date" minTickGap={60} tickFormatter={v => String(v).slice(5)} />
+          <YAxis domain={["auto", "auto"]} tickFormatter={v => Number(v).toFixed(2)} width={50} />
+          <Tooltip formatter={v => [Number(v).toFixed(4), "净值"]} />
+          <ReferenceLine y={1} stroke="#99a7a1" strokeDasharray="4 4" />
+          <Line type="linear" dataKey="equity" stroke={POSITIVE} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer></div>
+      <p className="selected-pairs">多空各50% · 每日等权 · 30%缓冲 · 每次成交额手续费0.05% · 未计资金费率和滑点。10月28日之后没有补画数据。</p>
+    </> : <EmptyChart label="正在读取历史回测" />}
+  </section></div>;
+}
+
 function App() {
   const [catalog, setCatalog] = useState<InstanceCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -745,6 +792,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [preview, setPreview] = useState<{instance_id: string; strategy_id: string; allow_short: boolean; state: string; last_start_state?: string; last_start_reason?: string; decision_time: string | null; targets: Array<{pair: string; side: string; weight: number | null; score: number | null}>} | null>(null);
+  const offline = catalog?.instances.find(instance => instance.id === selected)?.database_ready === false;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -791,6 +840,13 @@ function App() {
       busy = true;
       setLoading(true);
       try {
+        if (offline) {
+          const response = await fetch(`/api/instances/${encodeURIComponent(selected)}/targets`, {cache: "no-store", signal: controller.signal});
+          if (!response.ok) throw new Error(`目标预览 HTTP ${response.status}`);
+          const next = await response.json();
+          if (!controller.signal.aborted) { setPreview(next); setError(null); }
+          return;
+        }
         let snapshot: LiveDashboardData | null = null;
         let failure: unknown;
         for (let attempt = 0; attempt < 2 && !controller.signal.aborted; attempt++) {
@@ -812,7 +868,7 @@ function App() {
     void loadSnapshot();
     const timer = window.setInterval(() => void loadSnapshot(), 10_000);
     return () => { controller.abort(); window.clearInterval(timer); };
-  }, [selected, refreshNonce]);
+  }, [selected, refreshNonce, offline]);
 
   const visibleData = data?.instance.id === selected ? data : null;
   const failure = catalogError ?? error;
@@ -822,7 +878,7 @@ function App() {
       <div className="brand-mark" aria-label="Alpha Strategy Monitor"><span className="brand-symbol">A</span><div><strong>Alpha</strong><span>Strategy Monitor</span></div></div>
       <nav className="primary-nav" aria-label="主导航"><div className="nav-button active"><RadioTower size={18} /><span>实时模拟盘</span></div></nav>
       <div className="sidebar-status">
-        <div className="status-line"><span className={failure ? "status-dot error" : "status-dot"} />{failure ? "实时接口异常" : visibleData ? "监控已连接" : "正在连接"}</div>
+        <div className="status-line"><span className={failure ? "status-dot error" : "status-dot"} />{failure ? "实时接口异常" : offline ? "离线目标预览" : visibleData ? "监控已连接" : "正在连接"}</div>
         <span>{catalog?.instances.length ?? 0} 个本地实例</span>
         <span>{visibleData?.summary.open_positions ?? 0} 个当前持仓</span>
       </div>
@@ -839,7 +895,20 @@ function App() {
       </header>
       {failure ? <div className="inline-alert" role="alert">实时数据刷新失败：{failure}{visibleData ? "。界面保留本实例最后一次成功快照。" : ""}<button type="button" onClick={refresh} aria-label="重试连接"><RefreshCw size={16} /></button></div> : null}
       {catalog?.errors.length ? <div className="inline-alert" role="status">无法接入的实例：{catalog.errors.map(instance => instance.id).join("、")}</div> : null}
-      {visibleData ? <LiveView key={selected} data={visibleData} /> : failure ? <div className="loading-state">实时接口暂不可用</div> : catalog && !catalog.instances.length ? <div className="loading-state">暂无可监控的本地实例</div> : <LiveLoadingState />}
+      {catalog?.instances.find(instance => instance.id === selected)?.strategy_id === "xgb15-120-long-short-v1" ? <HistoricalBacktest key={selected} instanceId={selected} /> : null}
+      {offline && preview?.instance_id === selected ? <div className="page live-page"><section className="panel">
+        <PanelHeader title={selected} subtitle="目标持仓预览 · 尚未启动模拟交易" />
+        {preview.last_start_state === "blocked" && <div className="inline-alert" role="alert">实时模拟启动受阻，尚无实时成交。{preview.last_start_reason}</div>}
+        <div className="inline-alert" role="status">{preview.state === "offline_verified" ? "历史导入验收通过" : "等待信号验收"}。以下是模型目标，不是已成交持仓；最新行情及市值数据就绪后才能启动。</div>
+        <div className="signal-facts">
+          <DiagnosticRow label="历史信号时间" value={preview.decision_time ? formatDateTime(new Date(Date.parse(preview.decision_time) + 4*3600000).toISOString()) : "—"} />
+          {preview.strategy_id === "xgb15-120-long-short-v1" && <DiagnosticRow label="模型" value="15因子 · XGBoost 120棵树 · 学习率0.05 · 深度4" />}
+          {preview.allow_short && <><DiagnosticRow label="目标持仓" value={`多头 ${preview.targets.filter(t => t.side === "long").length} 币 · 空头 ${preview.targets.filter(t => t.side === "short").length} 币 · 各占50%`} /><DiagnosticRow label="调仓规则" value="每日等权 · 30%缓冲" /></>}
+        </div>
+        <div className="live-table-wrap"><table className="live-table target-preview-table"><thead><tr><th>交易对</th><th>方向</th><th>目标权重</th><th>预测超额收益</th></tr></thead><tbody>
+          {preview.targets.map(target => <tr key={target.pair}><td><strong>{shortPair(target.pair)}</strong></td><td style={{color: target.side === "short" ? NEGATIVE : POSITIVE}}>{target.side === "short" ? "空头" : "多头"}</td><td>{target.weight === null ? "—" : formatPct(target.weight*100)}</td><td>{target.score === null ? "—" : formatPct(target.score*100)}</td></tr>)}
+        </tbody></table></div>
+      </section></div> : visibleData ? <LiveView key={selected} data={visibleData} /> : failure ? <div className="loading-state">实时接口暂不可用</div> : catalog && !catalog.instances.length ? <div className="loading-state">暂无可监控的本地实例</div> : <LiveLoadingState />}
     </main>
   </div>;
 }

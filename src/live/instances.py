@@ -67,6 +67,11 @@ def prepare_instance(root: Path = ROOT, source_pairs: Path | None = None, *,
             "db_url": "sqlite:///" + str(database_path(instance).resolve()),
             "telegram": {"enabled": False, "token": "", "chat_id": ""},
         })
+        if strategy_id == "xgb15-120-long-short-v1":
+            config.update({"strategy": "AlphaCrossSectionalLiveLongShortStrategy",
+                           "max_open_trades": len(config["exchange"]["pair_whitelist"]), "fee": .0005, "stoploss": -.99,
+                           "position_adjustment_enable": True, "tradable_balance_ratio": 1.0,
+                           "initial_state": "running"})
         config_path.write_text(json.dumps(config, indent=2) + "\n")
     config = json.loads(config_path.read_text())
     expected_db = "sqlite:///" + str(database_path(instance).resolve())
@@ -101,7 +106,7 @@ def trade_command(instance: Path, config_path: Path | None = None) -> list[str]:
     return [sys.executable, "-m", "freqtrade", "trade", "--dry-run", "--userdir", str(instance_path(instance, "user_data")),
             "--config", str(config_path or instance / "config.json"),
             "--strategy-path", str(ROOT / "freqtrade/strategies"),
-            "--strategy", "AlphaCrossSectionalLiveLongOnlyStrategy", "--no-color"]
+            "--strategy", json.loads((instance / "config.json").read_text())["strategy"], "--no-color"]
 
 
 def stop_worker(process: subprocess.Popen) -> None:

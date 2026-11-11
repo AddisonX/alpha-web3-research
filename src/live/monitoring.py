@@ -36,7 +36,8 @@ class MonitoredInstance:
                     pid = int(runtime.get(key, 0))
                     if pid <= 1:
                         raise ValueError("missing runtime PID")
-                    os.kill(pid, 0)
+                    if not process_alive(pid):
+                        raise ValueError("runtime PID is not alive")
             except (OSError, ValueError, TypeError):
                 fresh = False
         return {
@@ -58,6 +59,31 @@ def read_object(path: Path) -> dict:
         return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def process_alive(pid: int) -> bool:
+    # On Windows signal 0 is CTRL_C_EVENT, not POSIX's harmless existence probe.
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD()
+        return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259
+    finally:
+        kernel.CloseHandle(handle)
 
 
 def discover_instances(root: Path) -> tuple[dict[str, MonitoredInstance], list[dict]]:

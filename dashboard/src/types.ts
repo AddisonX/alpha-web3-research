@@ -56,6 +56,9 @@ export interface LiveSummary {
 }
 
 export interface LiveSignalStatus {
+  short_pairs?: string[];
+  allow_short?: boolean;
+  reason?: string | null;
   state: string;
   generated_at: string | null;
   decision_time: string | null;
