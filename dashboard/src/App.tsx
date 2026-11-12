@@ -80,7 +80,7 @@ function LiveView({ data }: { data: LiveDashboardData }) {
             行情 {priceHealthy ? "正常" : "降级"}
           </span>
           <span className="tag">DRY-RUN</span>
-          <span className="tag">LONG ONLY</span>
+          <span className="tag">{data.signal.allow_short ? "LONG / SHORT" : "LONG ONLY"}</span>
         </div>
       </div>
 
@@ -275,7 +275,8 @@ function LiveView({ data }: { data: LiveDashboardData }) {
           <div className="runtime-summary">
             <DiagnosticRow label="钱包余额" value={formatMoney(data.summary.wallet_balance)} />
             <DiagnosticRow label="可用余额" value={formatMoney(data.summary.available_balance)} />
-            <DiagnosticRow label="累计手续费" value={formatMoney(data.summary.fees)} />
+            <DiagnosticRow label="交易手续费" value={formatMoney(data.summary.trading_fees ?? data.summary.fees)} />
+            <DiagnosticRow label="资金费净收支" value={formatMoney(data.summary.funding_net ?? 0, "USDT", true)} />
             <DiagnosticRow
               label="已平仓胜率"
               value={
@@ -576,7 +577,10 @@ function LiveEquityPanelComponent({ data }: { data: LiveDashboardData }) {
         <span><i className="legend-line" />实时估算权益</span>
         <span><i className="legend-dashed" />初始资金</span>
         <span className="zoom-hint">拖动底部滑块或两侧把手查看局部</span>
-        <strong>手续费累计 {formatMoney(data.summary.fees)}</strong>
+        <strong>交易手续费 {formatMoney(data.summary.trading_fees ?? data.summary.fees)}</strong>
+        <strong style={{color: valueColor(data.summary.funding_net ?? 0)}}>
+          资金费净收支 {formatMoney(data.summary.funding_net ?? 0, "USDT", true)}
+        </strong>
       </div>
     </section>
   );
@@ -587,7 +591,9 @@ const LiveEquityPanel = memo(
   (previous, next) =>
     previous.data.instance.id === next.data.instance.id
     && previous.data.summary.starting_balance === next.data.summary.starting_balance
-    && previous.data.summary.fees === next.data.summary.fees,
+    && previous.data.summary.fees === next.data.summary.fees
+    && previous.data.summary.trading_fees === next.data.summary.trading_fees
+    && previous.data.summary.funding_net === next.data.summary.funding_net,
 );
 
 function liveHistoryIntervalLabel(interval: LiveHistoryInterval): string {
@@ -754,6 +760,7 @@ function HistoricalBacktest({instanceId}: {instanceId: string}) {
     setResult(null); setError("");
     fetch(`/api/instances/${encodeURIComponent(instanceId)}/backtest`, {signal: controller.signal})
       .then(async response => {
+        if (response.status === 404) return;
         if (!response.ok) throw new Error(`历史回放 HTTP ${response.status}`);
         const next = await response.json() as Backtest2026;
         if (next.kind !== "historical_backtest") throw new Error("历史数据类型不匹配");
@@ -761,6 +768,7 @@ function HistoricalBacktest({instanceId}: {instanceId: string}) {
       }).catch(caught => { if (!controller.signal.aborted) setError(String(caught)); });
     return () => controller.abort();
   }, [instanceId]);
+  if (!result && !error) return null;
   return <div className="page live-page"><section className="panel" data-testid="historical-backtest">
     <PanelHeader title="2026年历史回放曲线" subtitle={result ? `${result.start_date} 至 ${result.end_date} · 扣费复利 · 历史回测，不是实时成交记录` : "加载历史回放"} />
     {error ? <div className="inline-alert">{error}</div> : result ? <>

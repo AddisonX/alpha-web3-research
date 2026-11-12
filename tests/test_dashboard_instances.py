@@ -86,6 +86,52 @@ def test_balances_and_histories_do_not_cross_instances(tmp_path):
     assert original == (first / "database/trades.dryrun.sqlite").read_bytes()
 
 
+@pytest.mark.parametrize("funding", [-12., 0., 17.])
+def test_closed_funding_is_reported_without_adding_it_to_profit_twice(tmp_path, funding):
+    directory = make_instance(tmp_path, "one", profit=100)
+    with closing(sqlite3.connect(directory / "database/trades.dryrun.sqlite")) as c, c:
+        c.execute("UPDATE trades SET funding_fees = ?", (funding,))
+    with TestClient(create_app(tmp_path, price_loader=lambda _: {}, start_sampler=False)) as client:
+        result = client.get("/api/instances/one/live").json()
+        assert result["summary"]["funding_net"] == funding
+        assert result["summary"]["equity"] == 10100
+        assert result["summary"]["trading_fees"] == result["summary"]["fees"] == 0
+
+
+@pytest.mark.parametrize("short,price,entry,exit", [(0, 110., "buy", "sell"), (1, 90., "sell", "buy")])
+def test_partial_exits_do_not_double_count_realized_funding_or_running_funding(tmp_path, short, price, entry, exit):
+    directory = make_instance(tmp_path, "one", profit=100)
+    database = directory / "database/trades.dryrun.sqlite"
+    with closing(sqlite3.connect(database)) as c, c:
+        c.execute("ALTER TABLE trades ADD COLUMN realized_profit REAL DEFAULT 0")
+        c.execute("ALTER TABLE trades ADD COLUMN funding_fee_running REAL DEFAULT 0")
+        c.execute("ALTER TABLE orders ADD COLUMN funding_fee REAL")
+        c.execute("ALTER TABLE orders ADD COLUMN ft_is_open INTEGER DEFAULT 0")
+        c.execute("UPDATE trades SET funding_fees = -3")
+        c.execute("""INSERT INTO trades (
+            id, pair, is_open, fee_open, fee_close, open_rate, stake_amount, amount,
+            open_date, leverage, is_short, funding_fees, realized_profit, funding_fee_running
+        ) VALUES (2, 'ETH/USDT:USDT', 1, 0, 0, 100, 500, 5,
+                  '2026-11-11 00:00:00', 1, ?, -7, 40, -1)""", (short,))
+        for order_id, side, funding in [(1, entry, -1), (2, exit, -2), (3, entry, -1), (4, exit, -1), (5, entry, -1)]:
+            c.execute("INSERT INTO orders (id, ft_trade_id, ft_order_side, filled, funding_fee) VALUES (?, 2, ?, 1, ?)",
+                      (order_id, side, funding))
+        c.execute("INSERT INTO orders (id, ft_trade_id, ft_order_side, filled, funding_fee) VALUES (6, 2, ?, 0, 999)", (exit,))
+        c.execute("INSERT INTO orders (id, ft_trade_id, ft_order_side, filled, funding_fee, ft_is_open) VALUES (7, 2, ?, 1, 999, 1)", (exit,))
+    original = database.read_bytes()
+    app = create_app(tmp_path, price_loader=lambda _: {"ETH/USDT:USDT": price}, start_sampler=False)
+    with TestClient(app) as client:
+        result = client.get("/api/instances/one/live").json()
+        assert result["positions"][0]["pnl_abs"] == 48  # 50 price PnL - 2 remaining funding
+        assert result["summary"]["unrealized_pnl"] == 48
+        assert result["summary"]["realized_pnl"] == 140
+        assert result["summary"]["funding_net"] == -10
+        assert result["summary"]["equity"] == 10188
+        assert result["summary"]["wallet_balance"] == 10140
+        assert client.get("/api/instances/one/equity").json()["points"][-1]["equity"] == 10188
+    assert original == database.read_bytes()
+
+
 def test_missing_database_is_not_an_empty_healthy_wallet(tmp_path):
     directory = make_instance(tmp_path, "one")
     (directory / "database/trades.dryrun.sqlite").unlink()

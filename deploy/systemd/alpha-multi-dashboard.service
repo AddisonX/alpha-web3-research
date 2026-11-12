@@ -1,0 +1,21 @@
+[Unit]
+Description=Alpha multi-instance read-only dashboard API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-runtime
+Environment=ALPHA_PROJECT_ROOT=/home/ubuntu/alpha-web3-runtime
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+ExecStart=/home/ubuntu/alpha-web3-runtime/.venv/bin/uvicorn src.live.dashboard:app --host 127.0.0.1 --port 18081
+Restart=on-failure
+RestartSec=10
+UMask=0077
+Slice=alpha-multi.slice
+
+[Install]
+WantedBy=multi-user.target

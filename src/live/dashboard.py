@@ -78,6 +78,7 @@ class LiveDashboardProvider:
             positions.sort(key=lambda row: row["pnl_abs"], reverse=True)
 
             realized_pnl = sum(float(trade["close_profit_abs"] or 0.0) for trade in closed_trades)
+            realized_pnl += sum(float(trade.get("realized_profit") or 0.0) for trade in open_trades)
             unrealized_pnl = sum(float(position["pnl_abs"]) for position in positions)
             total_pnl = realized_pnl + unrealized_pnl
             equity = self.starting_balance + total_pnl
@@ -87,6 +88,7 @@ class LiveDashboardProvider:
                 + float(trade["fee_close_cost"] or 0.0)
                 for trade in trades
             )
+            funding_net = sum(float(trade["funding_fees"] or 0.0) for trade in trades)
             wins = sum(1 for trade in closed_trades if float(trade["close_profit_abs"] or 0.0) > 0)
             losses = sum(1 for trade in closed_trades if float(trade["close_profit_abs"] or 0.0) < 0)
             if price_state == "healthy":
@@ -122,6 +124,8 @@ class LiveDashboardProvider:
                     "exposure": exposure,
                     "exposure_pct": exposure / max(equity, 1.0) * 100.0,
                     "fees": fees,
+                    "trading_fees": fees,
+                    "funding_net": funding_net,
                     "open_positions": len(open_trades),
                     "closed_trades": len(closed_trades),
                     "wins": wins,
@@ -169,14 +173,39 @@ class LiveDashboardProvider:
             SELECT id, pair, is_open, fee_open, fee_open_cost, fee_close,
                    fee_close_cost, open_rate, close_rate, close_profit,
                    close_profit_abs, stake_amount, amount, open_date, close_date,
-                   stop_loss, leverage, is_short, funding_fees, enter_tag, exit_reason
-            FROM trades
+                   stop_loss, leverage, is_short, funding_fees, enter_tag, exit_reason,
+                   {realized_profit} AS realized_profit,
+                   {realized_funding} AS realized_funding
+            FROM trades t
             ORDER BY id
         """
         with closing(sqlite3.connect(
             f"file:{self.database_path}?mode=ro", uri=True, timeout=5
         )) as connection:
             connection.row_factory = sqlite3.Row
+            connection.execute("BEGIN")
+            trade_columns = {row["name"] for row in connection.execute("PRAGMA table_info(trades)")}
+            order_columns = {row["name"] for row in connection.execute("PRAGMA table_info(orders)")}
+            # Freqtrade's cumulative funding already includes the running funding fee.
+            # Fees recorded through the last filled exit are in realized_profit already.
+            realized_funding = "0.0"
+            if "funding_fee" in order_columns and "realized_profit" in trade_columns:
+                order_closed = "AND {alias}.ft_is_open = 0" if "ft_is_open" in order_columns else ""
+                realized_funding = f"""COALESCE((
+                    SELECT SUM(o.funding_fee) FROM orders o
+                    WHERE o.ft_trade_id = t.id AND o.filled > 0
+                      {order_closed.format(alias="o")}
+                      AND o.id <= (
+                        SELECT MAX(e.id) FROM orders e
+                        WHERE e.ft_trade_id = t.id AND e.filled > 0
+                          {order_closed.format(alias="e")}
+                          AND e.ft_order_side = CASE WHEN t.is_short THEN 'buy' ELSE 'sell' END
+                      )
+                ), 0.0)"""
+            query = query.format(
+                realized_profit="t.realized_profit" if "realized_profit" in trade_columns else "0.0",
+                realized_funding=realized_funding,
+            )
             return [dict(row) for row in connection.execute(query)]
 
     def _read_orders(self) -> list[dict]:
@@ -371,15 +400,15 @@ def position_snapshot(
     fee_open = float(trade["fee_open"] or 0.0)
     fee_close = float(trade["fee_close"] or 0.0)
     open_rate = float(trade["open_rate"])
-    profit_ratio = (
-        (current_rate * (1.0 - fee_close))
-        / (open_rate * (1.0 + fee_open))
-        - 1.0
-    ) * leverage
-    if trade["is_short"]:
-        profit_ratio = ((open_rate * (1.0 - fee_open) - current_rate * (1.0 + fee_close))
-                        / open_rate) * leverage
-    pnl_abs = float(trade["stake_amount"]) * profit_ratio
+    amount = float(trade["amount"])
+    direction = -1.0 if trade["is_short"] else 1.0
+    price_pnl = direction * amount * (current_rate - open_rate)
+    trading_fees = amount * (open_rate * fee_open + current_rate * fee_close)
+    funding_net = float(trade.get("funding_fees") or 0.0)
+    remaining_funding = funding_net - float(trade.get("realized_funding") or 0.0)
+    pnl_abs = price_pnl - trading_fees + remaining_funding
+    stake = float(trade["stake_amount"])
+    profit_ratio = pnl_abs / stake if stake else 0.0
     open_date = _parse_database_datetime(trade["open_date"])
     return {
         "id": trade["id"],
@@ -391,6 +420,7 @@ def position_snapshot(
         "amount": trade["amount"],
         "pnl_abs": pnl_abs,
         "pnl_pct": profit_ratio * 100.0,
+        "funding_net": funding_net,
         "open_date": open_date.isoformat(),
         "duration_minutes": max(0, int((now - open_date).total_seconds() // 60)),
         "stop_loss": trade["stop_loss"],

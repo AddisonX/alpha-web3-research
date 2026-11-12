@@ -1,0 +1,28 @@
+[Unit]
+Description=Alpha independent dry-run instance %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-runtime
+EnvironmentFile=/home/ubuntu/alpha-web3-runtime/freqtrade/instances/%i/service.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=ALPHA_CCXT_TRUST_ENV=true
+Environment=ALPHA_BINANCE_API_KEY=
+Environment=ALPHA_BINANCE_SECRET=
+ExecStart=/home/ubuntu/alpha-web3-runtime/.venv/bin/python -u scripts/run_dryrun.py --strategy ${ALPHA_STRATEGY_ID} --instance %i
+Restart=on-failure
+RestartSec=60
+KillSignal=SIGINT
+KillMode=control-group
+TimeoutStopSec=45
+UMask=0077
+Slice=alpha-multi.slice
+
+[Install]
+WantedBy=multi-user.target

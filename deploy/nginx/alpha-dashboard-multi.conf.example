@@ -1,0 +1,34 @@
+server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+    server_name SERVER_NAME;
+
+    ssl_certificate /etc/letsencrypt/live/SERVER_NAME/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/SERVER_NAME/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    include /etc/nginx/snippets/alpha-dashboard-access.conf;
+
+    root /var/www/alpha-dashboard-multi;
+    index index.html;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy no-referrer always;
+
+    location /api/ {
+        limit_except GET { deny all; }
+        limit_req zone=alpha_dashboard_per_ip burst=40 nodelay;
+        limit_req zone=alpha_dashboard_api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:18081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 30s;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location / {
+        limit_except GET { deny all; }
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Refresh observed CMC market caps for XGB15 paper trading
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/alpha-web3-runtime
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+ExecStart=/home/ubuntu/alpha-web3-runtime/.venv/bin/python -u -m scripts.xgb15_assets refresh-caps
+ExecStartPost=/home/ubuntu/alpha-web3-runtime/.venv/bin/python -m scripts.xgb15_assets check
+TimeoutStartSec=1800
+UMask=0077
+Slice=alpha-multi.slice

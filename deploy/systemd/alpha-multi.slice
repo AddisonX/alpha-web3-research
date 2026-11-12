@@ -1,0 +1,9 @@
+[Unit]
+Description=Isolated resources for multi-instance paper trading
+
+[Slice]
+CPUAccounting=true
+MemoryAccounting=true
+CPUQuota=150%
+MemoryHigh=1800M
+MemoryMax=2200M

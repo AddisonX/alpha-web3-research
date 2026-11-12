@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily XGB15 market-cap refresh, with persisted missed schedule
+
+[Timer]
+OnCalendar=*-*-* 06:20:00 UTC
+RandomizedDelaySec=5m
+Persistent=true
+Unit=alpha-multi-caps-refresh.service
+
+[Install]
+WantedBy=timers.target

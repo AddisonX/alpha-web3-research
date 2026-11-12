@@ -18,10 +18,28 @@ test("shows signed historical targets without fabricating live balances", async 
 
 test("renders a short position as short", async ({ page }) => {
   await page.route("**/api/instances/tokyo-lightgbm/live?*", route => route.fulfill({json: {
-    ...liveSnapshot, positions: [{...liveSnapshot.positions[0], side: "short"}],
+    ...liveSnapshot, signal: {...liveSnapshot.signal, allow_short: true}, positions: [{...liveSnapshot.positions[0], side: "short"}],
   }}));
   await page.goto("/");
   await expect(page.getByText("Short / 空头", {exact: false})).toBeVisible();
+  await expect(page.getByText("LONG / SHORT", {exact: true})).toBeVisible();
+  await expect(page.getByText("LONG ONLY", {exact: true})).toHaveCount(0);
+});
+
+test("missing optional backtest does not show an error above the live instance", async ({ page }) => {
+  const instance = {...liveSnapshot.instance, id: "xgb15-paper", display_name: "xgb15-paper", strategy_id: "xgb15-120-long-short-v1"};
+  await page.route(/\/api\/instances(?:\?.*)?$/, route => route.fulfill({json: {
+    scope: "local", default_instance: instance.id, errors: [], instances: [instance],
+  }}));
+  await page.route("**/api/instances/xgb15-paper/live?*", route => route.fulfill({json: {
+    ...liveSnapshot, instance, signal: {...liveSnapshot.signal, allow_short: true},
+  }}));
+  await page.route("**/api/instances/xgb15-paper/backtest", route => route.fulfill({status: 404, json: {detail: "historical backtest unavailable"}}));
+  await page.goto("/?instance=xgb15-paper");
+  await expect(page.getByRole("heading", {name: "xgb15-paper", exact: true})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "实时权益曲线"})).toBeVisible();
+  await expect(page.getByTestId("historical-backtest")).toHaveCount(0);
+  await expect(page.locator(".inline-alert")).toHaveCount(0);
 });
 
 const liveSnapshot = {
@@ -49,6 +67,8 @@ const liveSnapshot = {
     exposure: 4500,
     exposure_pct: 44.78,
     fees: 4.5,
+    trading_fees: 4.5,
+    funding_net: -2.25,
     open_positions: 9,
     closed_trades: 0,
     wins: 0,
@@ -200,6 +220,20 @@ test("renders live dry-run monitor without horizontal page overflow", async ({ p
     ),
   ).toBe(true);
   expect(consoleErrors).toEqual([]);
+});
+
+test("shows trading fees and signed funding separately, including after refresh", async ({ page }) => {
+  await page.goto("/");
+  const legend = page.locator(".chart-legend-row");
+  await expect(legend.getByText("交易手续费 4.50 USDT", {exact: true})).toBeVisible();
+  await expect(legend.getByText("资金费净收支 -2.25 USDT", {exact: true})).toBeVisible();
+  await expect(page.locator(".runtime-summary").getByText("资金费净收支", {exact: true})).toBeVisible();
+  await page.route(/\/api\/instances\/[^/]+\/live(?:\?.*)?$/, route => route.fulfill({json: {
+    ...liveSnapshot, summary: {...liveSnapshot.summary, funding_net: 3.75},
+  }}));
+  await page.getByRole("button", {name: "刷新数据", exact: true}).click();
+  await expect(legend.getByText("资金费净收支 +3.75 USDT", {exact: true})).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
 });
 
 test("recovers from one transient live API failure without showing a false alarm", async ({ page }) => {

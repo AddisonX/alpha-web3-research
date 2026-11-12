@@ -48,6 +48,8 @@ export interface LiveSummary {
   exposure: number;
   exposure_pct: number;
   fees: number;
+  trading_fees: number;
+  funding_net: number;
   open_positions: number;
   closed_trades: number;
   wins: number;

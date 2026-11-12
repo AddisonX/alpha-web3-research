@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from src.live.dashboard import (
     LiveDashboardProvider,
     build_equity_history_response,
@@ -37,6 +39,25 @@ def test_position_snapshot_includes_round_trip_fees() -> None:
     assert 98 < position["pnl_abs"] < 100
     assert position["duration_minutes"] == 60
     assert position["model_score_rank_pct"] == 100.0
+
+
+@pytest.mark.parametrize("is_short,price", [(False, 110.0), (True, 90.0)])
+@pytest.mark.parametrize("funding", [-4.0, 0.0, 6.0])
+@pytest.mark.parametrize("leverage", [1.0, 3.0])
+def test_position_funding_is_signed_usdt_not_leveraged_again(is_short, price, funding, leverage):
+    trade = {
+        "id": 1, "pair": "BTC/USDT:USDT", "is_short": is_short,
+        "fee_open": .0005, "fee_close": .0005, "open_rate": 100.,
+        "stake_amount": 1000. / leverage, "amount": 10.,
+        "open_date": "2026-11-11 00:00:00", "stop_loss": None,
+        "leverage": leverage, "enter_tag": "test", "funding_fees": funding,
+        "funding_fee_running": funding,
+    }
+    position = position_snapshot(trade, price, {}, datetime(2026, 11, 11, tzinfo=timezone.utc))
+    expected = 100. - 10. * (100. * .0005 + price * .0005) + funding
+    assert position["pnl_abs"] == pytest.approx(expected)
+    assert position["pnl_pct"] == pytest.approx(expected / trade["stake_amount"] * 100)
+    assert position["funding_net"] == funding
 
 
 def test_history_max_drawdown_uses_running_equity_peak() -> None:
