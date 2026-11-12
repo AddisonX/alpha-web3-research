@@ -6,3 +6,11 @@
 /data/imports/xgb15/pairs.json text eol=lf
 /data/imports/xgb15/acceptance.json text eol=lf
 /data/imports/xgb15/bundle_manifest.json text eol=lf
+
+# The explicitly published LightGBM bundle is hash-verified byte for byte.
+/data/models/production/latest.json text eol=lf
+/data/models/production/*/manifest.json text eol=lf
+/data/models/production/*/*.txt -text
+/configs/paper/**/*.json text eol=lf
+/configs/paper/*.json text eol=lf
+/configs/paper/**/*.parquet binary

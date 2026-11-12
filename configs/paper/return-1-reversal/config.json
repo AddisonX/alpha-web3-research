@@ -1,0 +1,177 @@
+{
+  "$schema": "https://schema.freqtrade.io/schema.json",
+  "bot_name": "return-1-reversal-long-only-v1",
+  "dry_run": true,
+  "dry_run_wallet": 10000,
+  "trading_mode": "futures",
+  "margin_mode": "isolated",
+  "liquidation_buffer": 0.05,
+  "futures_funding_rate": 0.0,
+  "stake_currency": "USDT",
+  "stake_amount": "unlimited",
+  "tradable_balance_ratio": 0.99,
+  "max_open_trades": 9,
+  "timeframe": "4h",
+  "dataformat_ohlcv": "feather",
+  "cancel_open_orders_on_exit": true,
+  "unfilledtimeout": {
+    "entry": 10,
+    "exit": 10,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  "entry_pricing": {
+    "price_side": "other",
+    "use_order_book": true,
+    "order_book_top": 1,
+    "price_last_balance": 0.0,
+    "check_depth_of_market": {
+      "enabled": false,
+      "bids_to_ask_delta": 1
+    }
+  },
+  "exit_pricing": {
+    "price_side": "other",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "ccxt_config": {
+      "trust_env": true,
+      "timeout": 15000,
+      "options": {
+        "fetchMarkets": {
+          "types": [
+            "linear"
+          ]
+        },
+        "fetchCurrencies": false
+      },
+      "requests_trust_env": true,
+      "aiohttp_trust_env": true
+    },
+    "ccxt_async_config": {
+      "trust_env": true,
+      "timeout": 15000,
+      "options": {
+        "fetchMarkets": {
+          "types": [
+            "linear"
+          ]
+        },
+        "fetchCurrencies": false
+      },
+      "requests_trust_env": true,
+      "aiohttp_trust_env": true
+    },
+    "enable_ws": false,
+    "pair_whitelist": [
+      "1000BONK/USDT:USDT",
+      "1000PEPE/USDT:USDT",
+      "1000SHIB/USDT:USDT",
+      "AAVE/USDT:USDT",
+      "ADA/USDT:USDT",
+      "AERO/USDT:USDT",
+      "APT/USDT:USDT",
+      "ARB/USDT:USDT",
+      "ASTER/USDT:USDT",
+      "ATOM/USDT:USDT",
+      "AVAX/USDT:USDT",
+      "BAS/USDT:USDT",
+      "BCH/USDT:USDT",
+      "BEAT/USDT:USDT",
+      "BEL/USDT:USDT",
+      "BLESS/USDT:USDT",
+      "BNB/USDT:USDT",
+      "BTC/USDT:USDT",
+      "CRV/USDT:USDT",
+      "DASH/USDT:USDT",
+      "DEXE/USDT:USDT",
+      "DOGE/USDT:USDT",
+      "DOT/USDT:USDT",
+      "DYDX/USDT:USDT",
+      "ENA/USDT:USDT",
+      "EPIC/USDT:USDT",
+      "ETC/USDT:USDT",
+      "ETH/USDT:USDT",
+      "ETHFI/USDT:USDT",
+      "FARTCOIN/USDT:USDT",
+      "FET/USDT:USDT",
+      "FIL/USDT:USDT",
+      "GALA/USDT:USDT",
+      "GRASS/USDT:USDT",
+      "GUA/USDT:USDT",
+      "H/USDT:USDT",
+      "HBAR/USDT:USDT",
+      "HEI/USDT:USDT",
+      "HMSTR/USDT:USDT",
+      "HYPE/USDT:USDT",
+      "ID/USDT:USDT",
+      "IN/USDT:USDT",
+      "INJ/USDT:USDT",
+      "JTO/USDT:USDT",
+      "KAITO/USDT:USDT",
+      "KITE/USDT:USDT",
+      "LAB/USDT:USDT",
+      "LINK/USDT:USDT",
+      "LTC/USDT:USDT",
+      "MAGMA/USDT:USDT",
+      "MORPHO/USDT:USDT",
+      "NEAR/USDT:USDT",
+      "NIL/USDT:USDT",
+      "ONDO/USDT:USDT",
+      "OP/USDT:USDT",
+      "PAXG/USDT:USDT",
+      "PENDLE/USDT:USDT",
+      "PENGU/USDT:USDT",
+      "PIPPIN/USDT:USDT",
+      "RIF/USDT:USDT",
+      "RIVER/USDT:USDT",
+      "S/USDT:USDT",
+      "SAND/USDT:USDT",
+      "SEI/USDT:USDT",
+      "SKYAI/USDT:USDT",
+      "SOL/USDT:USDT",
+      "SUI/USDT:USDT",
+      "SYN/USDT:USDT",
+      "TAO/USDT:USDT",
+      "TIA/USDT:USDT",
+      "TRUMP/USDT:USDT",
+      "TRX/USDT:USDT",
+      "UB/USDT:USDT",
+      "UNI/USDT:USDT",
+      "VELVET/USDT:USDT",
+      "VIRTUAL/USDT:USDT",
+      "VVV/USDT:USDT",
+      "WIF/USDT:USDT",
+      "WLD/USDT:USDT",
+      "WLFI/USDT:USDT",
+      "XLM/USDT:USDT",
+      "XMR/USDT:USDT",
+      "XPL/USDT:USDT",
+      "XRP/USDT:USDT",
+      "ZEC/USDT:USDT"
+    ],
+    "pair_blacklist": []
+  },
+  "pairlists": [
+    {
+      "method": "StaticPairList",
+      "allow_inactive": false
+    }
+  ],
+  "internals": {
+    "process_throttle_secs": 15
+  },
+  "initial_state": "running",
+  "db_url": "sqlite:///freqtrade/instances/return-1-reversal/database/trades.dryrun.sqlite",
+  "strategy": "AlphaCrossSectionalLiveLongOnlyStrategy",
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chat_id": ""
+  }
+}

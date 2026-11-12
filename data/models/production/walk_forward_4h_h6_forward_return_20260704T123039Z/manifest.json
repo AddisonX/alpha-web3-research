@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "promoted_at": "2026-07-27T11:27:26.188355+00:00",
+  "source_experiment": "walk_forward_4h_h6_forward_return_20260704T123039Z",
+  "source_config": {
+    "experiment_id": "walk_forward_4h_h6_forward_return_20260704T123039Z",
+    "generated_at": "2026-07-04T12:30:41.639678+00:00",
+    "timeframe": "4h",
+    "horizon_bars": 6,
+    "label_column": "forward_return",
+    "train_days": 90,
+    "valid_days": 14,
+    "test_days": 14,
+    "step_days": 14,
+    "min_cross_section_count": 20,
+    "top_quantile_fraction": 0.1,
+    "embargo_bars": 6,
+    "seed": 42,
+    "params": {
+      "objective": "regression",
+      "n_estimators": 500,
+      "learning_rate": 0.03,
+      "num_leaves": 31,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "min_child_samples": 50,
+      "reg_alpha": 0.0,
+      "reg_lambda": 1.0,
+      "n_jobs": -1,
+      "verbosity": -1,
+      "random_state": 42
+    },
+    "features": [
+      "volatility_8",
+      "distance_to_high_24",
+      "range_1",
+      "distance_to_low_8",
+      "volatility_3",
+      "distance_to_low_4",
+      "lower_shadow_1",
+      "ma_gap_4",
+      "distance_to_low_2",
+      "volatility_2",
+      "range_to_quote_volume_12",
+      "distance_to_low_24",
+      "mean_return_4",
+      "return_12",
+      "upper_shadow_1",
+      "distance_to_high_8",
+      "distance_to_high_3",
+      "volume_change_6",
+      "return_8",
+      "volume_change_4",
+      "return_24",
+      "distance_to_high_2",
+      "volume_zscore_12",
+      "volume_change_24",
+      "volume_change_3",
+      "volume_change_12",
+      "volume_change_8",
+      "volume_change_2",
+      "volume_zscore_2",
+      "volume_zscore_3"
+    ],
+    "data_start": "2026-01-05T00:00:00+00:00",
+    "data_end": "2026-07-03T04:00:00+00:00"
+  },
+  "ensemble_method": "mean",
+  "models": [
+    {
+      "file": "fold_01_model.txt",
+      "sha256": "774beed91a428ac5ee1dfa906396631a1f46148ae988043319c9fa6b0457fcd3",
+      "bytes": 113013
+    },
+    {
+      "file": "fold_02_model.txt",
+      "sha256": "41645783fe3cc9e641acfce0eaaf65f7209ea871ae4656b17aca224abdc2dd32",
+      "bytes": 78261
+    },
+    {
+      "file": "fold_03_model.txt",
+      "sha256": "b4e3889aaa29fb1460b26476cffc45da3bd90b71fdc481a6d6b1bd0d6500ea75",
+      "bytes": 10767
+    },
+    {
+      "file": "fold_04_model.txt",
+      "sha256": "9026f281ea0b7fb4c33df2a3176fe6dcb2fae8081d825d860c6a8125cc127afc",
+      "bytes": 120313
+    },
+    {
+      "file": "fold_05_model.txt",
+      "sha256": "8bbc68bb9d71d8b3537e58035f37cdeebebab5c15385bfa50023d7592c7d0dd4",
+      "bytes": 10662
+    }
+  ]
+}

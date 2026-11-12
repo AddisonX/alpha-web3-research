@@ -59,9 +59,15 @@ def prepare_instance(root: Path = ROOT, source_pairs: Path | None = None, *,
     config_path = instance / "config.json"
     if not config_path.exists():
         pairs_path = instance / "pairs.json"
-        pairs_path.write_text((source_pairs or instance_directory(root) / "pairs.json").read_text())
-        write_live_long_only_config(pairs_path, config_path, use_testnet_market_data=False)
-        config = json.loads(config_path.read_text())
+        profile = root / "configs/paper" / default_instance_name(strategy_id)
+        default_pairs = profile / "pairs.json" if (profile / "pairs.json").exists() else instance_directory(root) / "pairs.json"
+        pairs_path.write_text((source_pairs or default_pairs).read_text())
+        if (profile / "config.json").exists():
+            config = json.loads((profile / "config.json").read_text())
+            config["exchange"]["pair_whitelist"] = json.loads(pairs_path.read_text())
+        else:
+            write_live_long_only_config(pairs_path, config_path, use_testnet_market_data=False)
+            config = json.loads(config_path.read_text())
         config.update({
             "bot_name": strategy_id, "strategy": "AlphaCrossSectionalLiveLongOnlyStrategy",
             "db_url": "sqlite:///" + str(database_path(instance).resolve()),

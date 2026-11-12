@@ -4,7 +4,6 @@ import json
 import numpy as np
 import lightgbm as lgb
 import polars as pl
-import pytest
 from typer.testing import CliRunner
 from src.cli import app
 from src.live.config import write_live_long_only_config
@@ -42,13 +41,13 @@ def test_production_bundle_loads_and_predicts_without_research_modules(tmp_path)
     assert np.isfinite(ensemble.predict(pl.DataFrame({n: [0.0, 1.0] for n in ensemble.features}))).all()
 
 
-def test_optional_local_production_bundle():
+def test_published_production_bundle():
     root = Path(__file__).resolve().parents[1] / "data/models/production"
-    if not (root / "latest.json").exists():
-        pytest.skip("private production weights are not distributed")
+    pointer = json.loads((root / "latest.json").read_text())
     ensemble = ProductionEnsemble(root)
     assert len(ensemble.boosters) == 5 and len(ensemble.features) == 30
     manifest = json.loads(ensemble.manifest_path.read_text())
+    assert hashlib.sha256(ensemble.manifest_path.read_bytes()).hexdigest() == pointer["manifest_sha256"]
     for item in manifest["models"]:
         assert hashlib.sha256((ensemble.bundle_dir / item["file"]).read_bytes()).hexdigest() == item["sha256"]
 
